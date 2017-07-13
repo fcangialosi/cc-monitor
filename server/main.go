@@ -1,43 +1,21 @@
-// server file
-// works with the functions in the other file
 package main
 
 import (
 	"fmt"
 	"net"
-	"os"
-	"sync"
+	"syscall"
 	"time"
+
+	"../config"
+
+	log "github.com/sirupsen/logrus"
 )
 
-var wg sync.WaitGroup
+var sendbuf []byte = make([]byte, config.SEND_BUF_BYTES)
 
-type TCPHeader struct {
-	seq_num            int
-	flow_id            int
-	src_id             int
-	sender_timestamp   float64
-	receiver_timestamp float64
-}
-
-/* A Simple function to verify error */
-func CheckError(err error) {
-	if err != nil {
-		fmt.Println("Error: ", err)
-		os.Exit(0)
-	}
-}
-
-func sendResponse(conn *net.UDPConn, addr *net.UDPAddr, message string) {
-	fmt.Println("Sending ", message)
-	_, err := conn.WriteToUDP([]byte(message), addr)
-	if err != nil {
-		fmt.Printf("Couldn't send response %v", err)
-	}
-}
+/*****************************************************************************/
 
 func listen_for_Remy() {
-	defer wg.Done()
 	p := make([]byte, 2048)
 	addr := net.UDPAddr{
 		Port: 1234,
@@ -56,34 +34,109 @@ func listen_for_Remy() {
 			continue
 		}
 		if i < 9 {
-			sendResponse(ser, remoteaddr, "Sup client")
+			//sendResponse(ser, remoteaddr, "Sup client")
 		} else {
-			sendResponse(ser, remoteaddr, "end")
+			//sendResponse(ser, remoteaddr, "end")
 		}
 
 	}
 }
 
-func listen_for_pings() {
-	defer wg.Done()
-	p := make([]byte, 2048)
-	addr := net.UDPAddr{
-		Port: 1235,
-		IP:   net.ParseIP("127.0.0.1"),
+func handleRequest(conn *net.TCPConn) {
+	reqBuf := make([]byte, config.MAX_REQ_SIZE)
+	n, err := conn.Read(reqBuf)
+	if err != nil {
+		log.Error(err)
+	}
+	if n <= 0 {
+		log.Error("read 0 bytes from client")
+		return
 	}
 
-	ser, err := net.ListenUDP("udp", &addr)
-	CheckError(err)
-	_, remoteaddr, err := ser.ReadFromUDP(p)
-	time.Sleep(10)
-	sendResponse(ser, remoteaddr, "ping")
+	req := string(reqBuf[:n])
+	log.Info("starting measurement", log.Fields{"alg": req})
+
+	switch req {
+	case "remy": // handle remy
+		// TODO launch genericc
+	default: // must be one of the tcps
+		// set cc alg
+		file, err := conn.File()
+		if err != nil {
+			log.Error(err)
+		}
+		syscall.SetsockoptString(int(file.Fd()), syscall.IPPROTO_TCP, config.TCP_CONGESTION, req)
+
+		// generate on/off distributions
+		prng := getNewPRNG()
+		on_dist := createExpDist(config.MEAN_ON_TIME_MS, prng)
+		off_dist := createExpDist(config.MEAN_OFF_TIME_MS, prng)
+
+		for i := 0; i < config.NUM_CYCLES; i++ {
+			// on
+			select {
+			case <-time.After(time.Millisecond * time.Duration(on_dist.Sample())):
+				break
+			default:
+				conn.Write(sendbuf)
+			}
+
+			// off
+			<-time.After(time.Millisecond * time.Duration(off_dist.Sample()))
+		}
+	}
+
+}
+
+func measureServer() {
+	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.MEASURE_SERVER_PORT)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	server, err := net.ListenTCP("tcp", laddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for {
+		conn, err := server.AcceptTCP()
+		if err != nil {
+			log.Warning(err)
+		}
+		go handleRequest(conn)
+	}
+}
+
+func pingServer() {
+	p := make([]byte, config.PING_SIZE_BYTES)
+
+	laddr, err := net.ResolveUDPAddr("udp", ":"+config.PING_SERVER_PORT)
+	if err != nil {
+		log.Fatal(err)
+	}
+	server, err := net.ListenUDP("udp", laddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for {
+		_, raddr, err := server.ReadFromUDP(p)
+		if err != nil {
+			log.Fatal(err)
+		}
+		server.WriteToUDP(p, raddr)
+	}
 
 }
 
 func main() {
-	wg.Add(1)
-	go listen_for_Remy()
-	wg.Add(1)
-	go listen_for_pings()
-	wg.Wait()
+	quit := make(chan struct{})
+
+	go pingServer()
+	//go measureServer()
+	//go dbServer(): handle incoming reports, send them on channel to db worker
+	//go dbWorker(): reads jobs from channel, writes them to db
+
+	<-quit
 }

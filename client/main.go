@@ -20,14 +20,6 @@ import (
 
 var wg sync.WaitGroup
 
-type TCPHeader struct {
-	seq_num            int
-	flow_id            int
-	src_id             int
-	sender_timestamp   float64
-	receiver_timestamp float64
-}
-
 func CheckError(err error) {
 	if err != nil {
 		fmt.Println("Error: ", err)
@@ -44,6 +36,7 @@ func start_remy(now time.Time) map[uint64]uint64 {
 	bytes_so_far := uint64(0)
 
 	p := make([]byte, 2048)
+
 	conn, err := net.Dial("udp", "127.0.0.1:1234")
 	defer conn.Close()
 	CheckError(err)
