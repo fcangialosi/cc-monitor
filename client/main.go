@@ -1,155 +1,198 @@
-// client file
-/*
-// basic idea for 3 functions: start remy, start_tcp, and ping
--> start remy sends the start remy message to the server and waits until the end message and counts throughput_dict
--> ping sends ping messages at the same start time
-		*** could use channels to stop them
--> start tcp will work similarly
-*/
 package main
 
 import (
-	"bufio"
+	"bytes"
 	"encoding/binary"
-	"fmt"
+	"encoding/gob"
 	"net"
-	"reflect"
 	"sync"
 	"time"
+
+	"../config"
+	log "github.com/sirupsen/logrus"
 )
 
-var wg sync.WaitGroup
-
+/*Simple function to print errors or ignore them*/
 func CheckError(err error) {
 	if err != nil {
-		fmt.Println("Error: ", err)
+		log.Fatal(err)
 	}
 }
 
-func elapsed(start time.Time) uint64 {
-	return uint64(time.Since(start).Seconds() * 1000)
+/*Gives elapsed time in milliseconds since a given start time*/
+func elapsed(start time.Time) float64 {
+	return float64(time.Since(start).Seconds() * 1000)
 }
 
-func start_remy(now time.Time) map[uint64]uint64 {
+/*Used by both Remy and TCP*/
+func throughput_so_far(start time.Time, bytes_received float64) float64 {
+	return (bytes_received / config.BYTES_TO_MBITS) / elapsed(start) // returns in Mbps
+}
+
+/*Sends start tcp message to server and records tcp throughput*/
+// NOTE: this function is basically a copy of start_remy, except I didn't want them to use the same function,
+// because the remy function requires the echo packet step, and I didn't want to add a condition to check for - if it's tcp or remy (unnecessary time)
+
+func start_tcp(wg sync.WaitGroup, start time.Time, ch chan<- bool) map[float64]float64 {
 	defer wg.Done()
-	throughput_dict := map[uint64]uint64{}
-	bytes_so_far := uint64(0)
-
-	p := make([]byte, 2048)
-
-	conn, err := net.Dial("udp", "127.0.0.1:1234")
+	throughput_dict := map[float64]float64{}
+	bytes_received := float64(0)
+	buf := make([]byte, 2048)
+	conn, err := net.Dial("tcp", config.SERVER_IP+":"+config.MEASURE_SERVER_PORT)
 	defer conn.Close()
 	CheckError(err)
-	// send the start remy message
-	fmt.Fprintf(conn, "start_remy")
+	conn.Write([]byte("tcp"))
 
-	// now wait and read messages until the end messages
 	for {
-		_, err = bufio.NewReader(conn).Read(p)
-		// end if the server sends "end"
-		end_bytes := []byte("end") // NOTE: I couldn't get this stopping condition to work properly
-		fmt.Printf("P is %s\n", string(p))
-		if reflect.DeepEqual(end_bytes, p) {
-			fmt.Println("In break")
-			break
-		}
-		// send back the packet header
-		if err == nil {
-			fmt.Printf("%s\n", p)
-		} else {
-			fmt.Printf("Some error %v\n", err)
-			break
-		}
-		bytes_so_far += 1500
-		current_throughput := (bytes_so_far) / elapsed(now)
-		fmt.Println("Bytes so far ", bytes_so_far, " current throughput ", current_throughput)
-		throughput_dict[bytes_so_far] = current_throughput
-		echo := make([]byte, 20)
-		copy(p[0:20], echo)
-		elapsed := elapsed(now)
-		time_buf := make([]byte, 8)
-		binary.PutUvarint(time_buf, elapsed)
-		send := append(echo, time_buf...)
-		fmt.Println("About to send more shit")
-		conn.Write(send)
-	}
-	return throughput_dict
+		n, err := conn.Read(buf)
+		CheckError(err)
 
+		// current ending condition to close the socket
+		if string(buf[:n]) == "end" {
+			break
+		}
+
+		// measure throughput
+		bytes_received += float64(n)
+		throughput_dict[bytes_received] = throughput_so_far(start, bytes_received)
+
+		// send back a ping
+		conn.Write([]byte("hello"))
+	}
+	ch <- true // can stop sending pings
+	return throughput_dict
 }
 
-func sendPings(start time.Time) map[uint64]uint64 {
-	// function that sends pings to our server - to be run in parallel with start_remy
+/*Very similar to start tcp, except sends back a packet with the rec. timestamp*/
+func start_remy(wg sync.WaitGroup, start time.Time, ch chan<- bool) map[float64]float64 {
 	defer wg.Done()
-	rtt_dict := map[uint64]uint64{}
-	p := make([]byte, 2048)
-	conn, err := net.Dial("udp", "127.0.0.1:1235")
-	defer conn.Close()
+	throughput_dict := map[float64]float64{} // returns a map of bytes so far to throughput at that time
+	bytes_received := float64(0)
+	buf := make([]byte, 2048)
+
+	// create connection
+	conn, err := net.Dial("udp", config.SERVER_IP+":"+config.MEASURE_SERVER_PORT)
 	CheckError(err)
+	defer conn.Close() // close connection at end of function
 
-	// send pings and record RTTs
-	// TODO: should be a loop but rn not yet
-	send := elapsed(start)
-	fmt.Fprintf(conn, "ping")
-	_, err = bufio.NewReader(conn).Read(p)
-	if err == nil {
-		fmt.Printf("%s\n", p)
-	} else {
-		fmt.Printf("Some error %v\n", err)
+	// send the start message, then wait for data
+	conn.Write([]byte("remy"))
+
+	// loop to read bytes and send back to the server
+	for {
+		n, err := conn.Read(buf)
+		CheckError(err)
+
+		// current ending condition to close the socket
+		if string(buf[:n]) == "end" {
+			break
+		}
+
+		// measure throughput
+		bytes_received += float64(n)
+		throughput_dict[bytes_received] = throughput_so_far(start, bytes_received)
+
+		// echo packet with receive timestamp
+		echo := SetHeaderVal(buf[:n], config.RECEIVE_TIMESTAMP_START, binary.LittleEndian, elapsed(start))
+		conn.Write(echo.Bytes())
 	}
-	received := elapsed(start)
-	rtt := received - send
-	rtt_dict[send] = rtt
+	ch <- true // can stop sending pings
+	return throughput_dict
+}
 
+/*Starts a ping chain - stops when the other goroutine sends a message over a channel*/
+func ping_server(wg sync.WaitGroup, start time.Time, ch <-chan bool) map[float64]float64 {
+	defer wg.Done()
+	rtt_dict := map[float64]float64{}
+	ping := []byte("ping")
+	buf := make([]byte, 2048)
+	// create tcp connection to the server
+	conn, err := net.Dial("tcp", config.SERVER_IP+":"+config.PING_SERVER_PORT)
+	CheckError(err)
+	defer conn.Close()
+	end := false
+	for end {
+		select {
+		case <-ch:
+			end = true
+		default:
+			send_timestamp := elapsed(start)
+			conn.Write(ping)
+			_, err := conn.Read(buf)
+			rec_timestamp := elapsed(start)
+			CheckError(err)
+			rtt_dict[send_timestamp] = (rec_timestamp - send_timestamp)
+		}
+	}
 	return rtt_dict
 }
 
-func start_tcp(start time.Time) map[uint64]uint64 {
-	defer wg.Done()
-	throughput_dict := map[uint64]uint64{}
-	p := make([]byte, 2048)
-	conn, err := net.Dial("tcp", "127.0.0.1:1235")
-	defer conn.Close()
-	fmt.Fprintf(conn, "start_tcp")
-	CheckError(err)
-	for {
-		end_bytes := []byte("end")
-		fmt.Printf("P is %s\n", string(p))
-		if reflect.DeepEqual(end_bytes, p) {
-			fmt.Println("In break")
-			break
-		}
-		fmt.Fprintf(conn, "ping")
-		_, err = bufio.NewReader(conn).Read(p)
-		if err == nil {
-			fmt.Printf("%s\n", p)
-		} else {
-			fmt.Printf("Some error %v\n", err)
-		}
-	}
-	return throughput_dict
+func run_experiment(f func(wg sync.WaitGroup, start time.Time, ch chan<- bool) map[float64]float64) CCResults {
+	var wg sync.WaitGroup
+	end_ping := make(chan bool)
+	start := time.Now()
+	throughput := map[float64]float64{}
+	ping_results := map[float64]float64{}
 
+	wg.Add(1)
+	go func() {
+		throughput = f(wg, start, end_ping)
+	}()
+
+	wg.Add(1)
+	go func() {
+		ping_results = ping_server(wg, start, end_ping)
+	}()
+
+	wg.Wait()
+
+	// NOTE: this is bad go programming - you're supposed to send the return value from the go routine in a channel
+	// but we're waiting till the threads finish anyway
+	results := CCResults{Throughput: throughput, Ping: ping_results}
+	return results
 }
 
-func main() {
-	// run Remy and ping at same time,
-	// then run TCP and ping at same time
-	start := time.Now()
-	wg.Add(1)
-	go func() {
-		dict := start_remy(start)
-		println("Dict is", dict)
-		for key, value := range dict {
-			fmt.Println("Maps ", key, " to ", value)
-		}
-	}()
+/*Encodes the inner CC results struct*/
+func encodeCCResults(cc *CCResults) []byte {
+	w := new(bytes.Buffer)
+	e := gob.NewEncoder(w)
+	e.Encode(cc.Throughput)
+	e.Encode(cc.Ping)
+	return w.Bytes()
+}
 
-	wg.Add(1)
-	go func() {
-		rtt_dict := sendPings(start)
-		for key, value := range rtt_dict {
-			fmt.Println("rtt dict Maps ", key, " to ", value)
-		}
-	}()
-	wg.Wait()
+/*Not sure about marshalling in Go: I thought I would have to make the inner structs into bytes before encoding the outer struct*/
+func encodeFinalResults(res *Results) []byte {
+	w := new(bytes.Buffer)
+	e := gob.NewEncoder(w)
+	e.Encode(res.Remy)
+	e.Encode(res.TCP)
+	return w.Bytes()
+}
+
+type CCResults struct {
+	Throughput map[float64]float64
+	Ping       map[float64]float64
+}
+
+type Results struct {
+	Remy []byte // encoded remy results
+	TCP  []byte // encoded TCP results
+}
+
+/*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
+func main() {
+	remy := run_experiment(start_remy)
+	tcp := run_experiment(start_tcp)
+
+	// encode the results and send to the server
+	results := Results{Remy: encodeCCResults(&remy), TCP: encodeCCResults(&tcp)}
+	exp := encodeFinalResults(&results)
+
+	// make TCP connection to send to the server
+	conn, err := net.Dial("tcp", config.SERVER_IP+":"+config.MEASURE_SERVER_PORT)
+	CheckError(err)
+	defer conn.Close()
+	conn.Write(exp)
 
 }

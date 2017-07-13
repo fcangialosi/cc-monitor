@@ -1,5 +1,16 @@
 package config
 
+// conversion
+const BYTES_TO_MBITS = 8000000
+
+// IP
+const SERVER_IP = "127.0.0.1"
+
+// HEADER
+const HEADER_SIZE = 28
+const RECEIVE_TIMESTAMP_START = 20
+const RECEIVE_TIMESTAMP_END = 28
+
 // Ports
 const PING_SERVER_PORT = "10100"
 const MEASURE_SERVER_PORT = "10101"
