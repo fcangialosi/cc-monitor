@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net"
 	"syscall"
 	"time"
@@ -15,30 +14,45 @@ var sendbuf []byte = make([]byte, config.SEND_BUF_BYTES)
 
 /*****************************************************************************/
 
-func listen_for_Remy() {
-	p := make([]byte, 2048)
-	addr := net.UDPAddr{
-		Port: 1234,
-		IP:   net.ParseIP("127.0.0.1"),
-	}
-	ser, err := net.ListenUDP("udp", &addr)
-	if err != nil {
-		fmt.Printf("Some error %v\n", err)
-		return
-	}
-	_, remoteaddr, err := ser.ReadFromUDP(p)
-	for i := 1; i <= 10; i++ {
-		fmt.Printf("Read a message from %v %s \n", remoteaddr, p)
-		if err != nil {
-			fmt.Printf("Some error  %v", err)
-			continue
-		}
-		if i < 9 {
-			//sendResponse(ser, remoteaddr, "Sup client")
-		} else {
-			//sendResponse(ser, remoteaddr, "end")
-		}
+func pingServer() {
+	p := make([]byte, config.PING_SIZE_BYTES)
 
+	laddr, err := net.ResolveUDPAddr("udp", ":"+config.PING_SERVER_PORT)
+	if err != nil {
+		log.Fatal(err)
+	}
+	server, err := net.ListenUDP("udp", laddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for {
+		_, raddr, err := server.ReadFromUDP(p)
+		if err != nil {
+			log.Fatal(err)
+		}
+		server.WriteToUDP(p, raddr)
+	}
+
+}
+
+func measureServer() {
+	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.MEASURE_SERVER_PORT)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	server, err := net.ListenTCP("tcp", laddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for {
+		conn, err := server.AcceptTCP()
+		if err != nil {
+			log.Warning(err)
+		}
+		go handleRequest(conn)
 	}
 }
 
@@ -88,55 +102,21 @@ func handleRequest(conn *net.TCPConn) {
 
 }
 
-func measureServer() {
-	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.MEASURE_SERVER_PORT)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	server, err := net.ListenTCP("tcp", laddr)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for {
-		conn, err := server.AcceptTCP()
-		if err != nil {
-			log.Warning(err)
-		}
-		go handleRequest(conn)
-	}
+func dbServer() {
+	// TODO handle incoming reports, send them on channel to db worker
 }
 
-func pingServer() {
-	p := make([]byte, config.PING_SIZE_BYTES)
-
-	laddr, err := net.ResolveUDPAddr("udp", ":"+config.PING_SERVER_PORT)
-	if err != nil {
-		log.Fatal(err)
-	}
-	server, err := net.ListenUDP("udp", laddr)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for {
-		_, raddr, err := server.ReadFromUDP(p)
-		if err != nil {
-			log.Fatal(err)
-		}
-		server.WriteToUDP(p, raddr)
-	}
-
+func dbWorker() {
+	// TODO reads jobs from channel, writes them to db
 }
 
 func main() {
 	quit := make(chan struct{})
 
 	go pingServer()
-	//go measureServer()
-	//go dbServer(): handle incoming reports, send them on channel to db worker
-	//go dbWorker(): reads jobs from channel, writes them to db
+	go measureServer()
+	go dbServer()
+	go dbWorker()
 
 	<-quit
 }
