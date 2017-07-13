@@ -57,6 +57,8 @@ func measureServer() {
 }
 
 func handleRequest(conn *net.TCPConn) {
+	defer conn.Close()
+
 	reqBuf := make([]byte, config.MAX_REQ_SIZE)
 	n, err := conn.Read(reqBuf)
 	if err != nil {
