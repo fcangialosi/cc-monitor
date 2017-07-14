@@ -22,5 +22,5 @@ func createExpDist(mean float64, prng *rand.Rand) *ExponentialDistribution {
 }
 
 func (e *ExponentialDistribution) Sample() float64 {
-	return e.prng.ExpFloat64() / e.mean
+	return e.prng.ExpFloat64() * e.mean
 }
