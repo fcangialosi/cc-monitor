@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"encoding/binary"
-	"encoding/gob"
 	"net"
 	"sync"
 	"time"
@@ -33,42 +31,44 @@ func throughput_so_far(start time.Time, bytes_received float64) float64 {
 // NOTE: this function is basically a copy of start_remy, except I didn't want them to use the same function,
 // because the remy function requires the echo packet step, and I didn't want to add a condition to check for - if it's tcp or remy (unnecessary time)
 
-func start_tcp(wg sync.WaitGroup, start time.Time, ch chan<- bool) map[float64]float64 {
-	defer wg.Done()
+func measureTCP(alg string, ch chan<- time.Time) map[float64]float64 {
 	throughput_dict := map[float64]float64{}
 	bytes_received := float64(0)
-	buf := make([]byte, 2048)
+	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
+
 	conn, err := net.Dial("tcp", config.SERVER_IP+":"+config.MEASURE_SERVER_PORT)
-	defer conn.Close()
 	CheckError(err)
-	conn.Write([]byte("tcp"))
+	defer conn.Close()
+
+	start := time.Now()
+	conn.Write([]byte(alg))
+	ch <- start
 
 	for {
-		n, err := conn.Read(buf)
+		n, err := conn.Read(recvBuf)
 		CheckError(err)
 
 		// current ending condition to close the socket
-		if string(buf[:n]) == "end" {
+		// TODO check closed socket?
+		if string(recvBuf[:n]) == "end" {
 			break
 		}
 
 		// measure throughput
 		bytes_received += float64(n)
+		// TODO only do increments
 		throughput_dict[bytes_received] = throughput_so_far(start, bytes_received)
-
-		// send back a ping
-		conn.Write([]byte("hello"))
 	}
-	ch <- true // can stop sending pings
+	ch <- time.Time{} // can stop sending pings
 	return throughput_dict
 }
 
 /*Very similar to start tcp, except sends back a packet with the rec. timestamp*/
-func start_remy(wg sync.WaitGroup, start time.Time, ch chan<- bool) map[float64]float64 {
-	defer wg.Done()
+func measureUDP(alg string, ch chan<- time.Time) map[float64]float64 {
 	throughput_dict := map[float64]float64{} // returns a map of bytes so far to throughput at that time
 	bytes_received := float64(0)
-	buf := make([]byte, 2048)
+	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
+	shouldEcho := (alg == "remy")
 
 	// create connection
 	conn, err := net.Dial("udp", config.SERVER_IP+":"+config.MEASURE_SERVER_PORT)
@@ -76,123 +76,124 @@ func start_remy(wg sync.WaitGroup, start time.Time, ch chan<- bool) map[float64]
 	defer conn.Close() // close connection at end of function
 
 	// send the start message, then wait for data
-	conn.Write([]byte("remy"))
+	start := time.Now()
+	conn.Write([]byte(alg))
+	ch <- start
 
 	// loop to read bytes and send back to the server
 	for {
-		n, err := conn.Read(buf)
+		n, err := conn.Read(recvBuf)
 		CheckError(err)
 
 		// current ending condition to close the socket
-		if string(buf[:n]) == "end" {
+		if string(recvBuf[:n]) == "end" {
 			break
 		}
 
 		// measure throughput
 		bytes_received += float64(n)
+		// TODO only do increments
 		throughput_dict[bytes_received] = throughput_so_far(start, bytes_received)
 
 		// echo packet with receive timestamp
-		echo := SetHeaderVal(buf[:n], config.RECEIVE_TIMESTAMP_START, binary.LittleEndian, elapsed(start))
-		conn.Write(echo.Bytes())
+		// TODO check if this works
+		if shouldEcho {
+			echo := SetHeaderVal(recvBuf[:n], config.RECEIVE_TIMESTAMP_START, binary.LittleEndian, elapsed(start))
+			conn.Write(echo.Bytes())
+		}
 	}
-	ch <- true // can stop sending pings
+	ch <- time.Time{} // can stop sending pings
 	return throughput_dict
 }
 
 /*Starts a ping chain - stops when the other goroutine sends a message over a channel*/
-func ping_server(wg sync.WaitGroup, start time.Time, ch <-chan bool) map[float64]float64 {
-	defer wg.Done()
+func sendPings(ch <-chan time.Time) map[float64]float64 {
 	rtt_dict := map[float64]float64{}
-	ping := []byte("ping")
-	buf := make([]byte, 2048)
+	pingBuf := make([]byte, config.PING_SIZE_BYTES)
+	recvBuf := make([]byte, config.PING_SIZE_BYTES)
+
 	// create tcp connection to the server
-	conn, err := net.Dial("tcp", config.SERVER_IP+":"+config.PING_SERVER_PORT)
+	// TODO this should probably use tcp/udp depending on which algorithm is running
+	// TODO but need to support this on the server as well, for now just udp
+	conn, err := net.Dial("udp", config.SERVER_IP+":"+config.PING_SERVER_PORT)
 	CheckError(err)
 	defer conn.Close()
-	end := false
-	for !end {
+
+	// wait for measurement to start
+	start := <-ch
+
+sendloop:
+	for {
 		select {
 		case <-ch:
-			end = true
+			break sendloop
 		default:
 			send_timestamp := elapsed(start)
-			conn.Write(ping)
-			_, err := conn.Read(buf)
-			rec_timestamp := elapsed(start)
+			conn.Write(pingBuf)
+			_, err := conn.Read(recvBuf)
+			recv_timestamp := elapsed(start)
 			CheckError(err)
-			rtt_dict[send_timestamp] = (rec_timestamp - send_timestamp)
+			rtt_dict[send_timestamp] = (recv_timestamp - send_timestamp)
 		}
 	}
 	return rtt_dict
 }
 
-func run_experiment(f func(wg sync.WaitGroup, start time.Time, ch chan<- bool) map[float64]float64) CCResults {
+func runExperiment(f func(alg string, ch chan<- time.Time) map[float64]float64, alg string, report *CCResults) {
 	var wg sync.WaitGroup
-	end_ping := make(chan bool)
-	start := time.Now()
+	end_ping := make(chan time.Time)
 	throughput := map[float64]float64{}
 	ping_results := map[float64]float64{}
 
 	wg.Add(1)
-	go func() {
-		throughput = f(wg, start, end_ping)
-	}()
+	go func(wg *sync.WaitGroup) {
+		defer wg.Done()
+		throughput = f(alg, end_ping)
+	}(&wg)
 
 	wg.Add(1)
-	go func() {
-		ping_results = ping_server(wg, start, end_ping)
-	}()
+	go func(wg *sync.WaitGroup) {
+		defer wg.Done()
+		ping_results = sendPings(end_ping)
+	}(&wg)
 
 	wg.Wait()
 
-	// NOTE: this is bad go programming - you're supposed to send the return value from the go routine in a channel
-	// but we're waiting till the threads finish anyway
-	results := CCResults{Throughput: throughput, Ping: ping_results}
-	return results
+	report.Throughput[alg] = throughput
+	report.Delay[alg] = ping_results
 }
 
-/*Encodes the inner CC results struct*/
-func encodeCCResults(cc *CCResults) []byte {
-	w := new(bytes.Buffer)
-	e := gob.NewEncoder(w)
-	e.Encode(cc.Throughput)
-	e.Encode(cc.Ping)
-	return w.Bytes()
-}
-
-/*Not sure about marshalling in Go: I thought I would have to make the inner structs into bytes before encoding the outer struct*/
-func encodeFinalResults(res *Results) []byte {
-	w := new(bytes.Buffer)
-	e := gob.NewEncoder(w)
-	e.Encode(res.Remy)
-	e.Encode(res.TCP)
-	return w.Bytes()
-}
-
-type CCResults struct {
-	Throughput map[float64]float64
-	Ping       map[float64]float64
-}
-
-type Results struct {
-	Remy []byte // encoded remy results
-	TCP  []byte // encoded TCP results
+func sendReport(report []byte) {
+	conn, err := net.Dial("tcp", config.SERVER_IP+":"+config.DB_SERVER_PORT)
+	CheckError(err)
+	defer conn.Close()
+	conn.Write(report)
 }
 
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
-	remy := run_experiment(start_remy)
-	tcp := run_experiment(start_tcp)
+	// TODO bootstrap -- ask one known server for a list of other server IP
+	// addresses and algorithms to test
+	udp_algorithms := []string{"remy"}
+	tcp_algorithms := []string{"cubic"}
+	// TODO shuffle order
 
-	// encode the results and send to the server
-	results := Results{Remy: encodeCCResults(&remy), TCP: encodeCCResults(&tcp)}
-	exp := encodeFinalResults(&results)
+	report := CCResults{
+		Throughput: make(map[string]map[float64]float64),
+		Delay:      make(map[string]map[float64]float64),
+	}
 
-	// make TCP connection to send to the server
-	conn, err := net.Dial("tcp", config.SERVER_IP+":"+config.MEASURE_SERVER_PORT)
-	CheckError(err)
-	defer conn.Close()
-	conn.Write(exp)
+	for _, alg := range udp_algorithms {
+		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
+		runExperiment(measureUDP, alg, &report)
+	}
+	for _, alg := range tcp_algorithms {
+		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
+		runExperiment(measureTCP, alg, &report)
+	}
+	log.Info("all experiments finished")
 
+	log.Info("sending report")
+	sendReport(report.encode())
+	log.Info("done")
 }

@@ -25,7 +25,7 @@ const TCP_CONGESTION = 0xd
 const MEAN_ON_TIME_MS = 10000
 const MEAN_OFF_TIME_MS = 3000
 const NUM_CYCLES = 5
-const SEND_BUF_BYTES = 1492
+const TRANSFER_BUF_SIZE = 2048
 const PATH_TO_GENERIC_CC = "./sender"
 const PATH_TO_REMY_CC = "./RemyCC-2014-100x.dna"
 

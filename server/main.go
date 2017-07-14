@@ -11,7 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var sendbuf []byte = make([]byte, config.SEND_BUF_BYTES)
+var sendBuf []byte = make([]byte, config.TRANSFER_BUF_SIZE)
 
 /*****************************************************************************/
 
@@ -97,7 +97,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 				case <-on_timer:
 					break sendloop
 				default:
-					conn.Write(sendbuf)
+					conn.Write(sendBuf)
 				}
 			}
 
