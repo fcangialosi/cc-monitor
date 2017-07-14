@@ -2,6 +2,7 @@ package main
 
 import (
 	"net"
+	"os"
 	"os/exec"
 	"strconv"
 	"syscall"
@@ -126,11 +127,11 @@ func measureServerUDP() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		go handleRequestUDP(string(reqBuf[:n]), raddr)
+		go handleRequestUDP(string(reqBuf[:n]), server, raddr)
 	}
 }
 
-func handleRequestUDP(alg string, raddr *net.UDPAddr) {
+func handleRequestUDP(alg string, server *net.UDPConn, raddr *net.UDPAddr) {
 	ip := raddr.IP.String()
 	port := strconv.Itoa(raddr.Port)
 	on_time := strconv.Itoa(config.MEAN_ON_TIME_MS)
@@ -144,12 +145,16 @@ func handleRequestUDP(alg string, raddr *net.UDPAddr) {
 			"onduration=" + on_time,
 			"offduration=" + off_time,
 			"cctype=remy",
-			"traffic_params=exponential",
+			"traffic_params=exponential,num_cycles=1",
 			"if=" + config.PATH_TO_REMY_CC,
 		}
-		if err := exec.Command(config.PATH_TO_GENERIC_CC, args...); err != nil {
+		// TODO remove stdout when done testing
+		cmd := exec.Command(config.PATH_TO_GENERIC_CC, args...)
+		cmd.Stdout = os.Stdout
+		if err := cmd.Run(); err != nil {
 			log.Error(err)
 		}
+		server.WriteToUDP([]byte("end"), raddr)
 	default:
 		log.WithFields(log.Fields{"alg": alg}).Error("udp algorithm not implemented")
 	}
