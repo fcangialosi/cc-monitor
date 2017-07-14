@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -46,12 +47,12 @@ func measureTCP(alg string, ch chan<- time.Time) map[float64]float64 {
 
 	for {
 		n, err := conn.Read(recvBuf)
-		CheckError(err)
-
-		// current ending condition to close the socket
-		// TODO check closed socket?
-		if string(recvBuf[:n]) == "end" {
-			break
+		if err != nil {
+			if err == io.EOF {
+				break
+			} else {
+				log.Error(err)
+			}
 		}
 
 		// measure throughput
@@ -83,11 +84,12 @@ func measureUDP(alg string, ch chan<- time.Time) map[float64]float64 {
 	// loop to read bytes and send back to the server
 	for {
 		n, err := conn.Read(recvBuf)
-		CheckError(err)
-
-		// current ending condition to close the socket
-		if string(recvBuf[:n]) == "end" {
-			break
+		if err != nil {
+			if err == io.EOF {
+				break
+			} else {
+				log.Error(err)
+			}
 		}
 
 		// measure throughput
@@ -183,13 +185,13 @@ func main() {
 		Delay:      make(map[string]map[float64]float64),
 	}
 
-	for _, alg := range udp_algorithms {
-		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
-		runExperiment(measureUDP, alg, &report)
-	}
 	for _, alg := range tcp_algorithms {
 		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
 		runExperiment(measureTCP, alg, &report)
+	}
+	for _, alg := range udp_algorithms {
+		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
+		runExperiment(measureUDP, alg, &report)
 	}
 	log.Info("all experiments finished")
 
