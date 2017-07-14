@@ -7,9 +7,9 @@ const BYTES_TO_MBITS = 8000000
 const SERVER_IP = "127.0.0.1"
 
 // HEADER
-const HEADER_SIZE = 28
-const RECEIVE_TIMESTAMP_START = 20
-const RECEIVE_TIMESTAMP_END = 28
+const HEADER_SIZE = 32
+const RECEIVE_TIMESTAMP_START = 24
+const RECEIVE_TIMESTAMP_END = 32
 
 // Ports
 const PING_SERVER_PORT = "10100"
@@ -26,7 +26,5 @@ const MEAN_ON_TIME_MS = 10000
 const MEAN_OFF_TIME_MS = 3000
 const NUM_CYCLES = 5
 const TRANSFER_BUF_SIZE = 2048
-const PATH_TO_GENERIC_CC = "./sender"
-const PATH_TO_REMY_CC = "./RemyCC-2014-100x.dna"
-
-// DB server constants
+const PATH_TO_GENERIC_CC = "/home/ubuntu/genericCC/sender"
+const PATH_TO_REMY_CC = "/home/ubuntu/cc-monitor/bigbertha-100x.dna.5"

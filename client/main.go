@@ -32,7 +32,7 @@ func throughput_so_far(start time.Time, bytes_received float64) float64 {
 // NOTE: this function is basically a copy of start_remy, except I didn't want them to use the same function,
 // because the remy function requires the echo packet step, and I didn't want to add a condition to check for - if it's tcp or remy (unnecessary time)
 
-func measureTCP(alg string, ch chan<- time.Time) map[float64]float64 {
+func measureTCP(alg string, ch chan time.Time) map[float64]float64 {
 	throughput_dict := map[float64]float64{}
 	bytes_received := float64(0)
 	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
@@ -65,31 +65,38 @@ func measureTCP(alg string, ch chan<- time.Time) map[float64]float64 {
 }
 
 /*Very similar to start tcp, except sends back a packet with the rec. timestamp*/
-func measureUDP(alg string, ch chan<- time.Time) map[float64]float64 {
+func measureUDP(alg string, ch chan time.Time) map[float64]float64 {
 	throughput_dict := map[float64]float64{} // returns a map of bytes so far to throughput at that time
 	bytes_received := float64(0)
 	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
 	shouldEcho := (alg == "remy")
 
 	// create connection
-	conn, err := net.Dial("udp", config.SERVER_IP+":"+config.MEASURE_SERVER_PORT)
+	laddr, err := net.ResolveUDPAddr("udp", ":98765")
 	CheckError(err)
-	defer conn.Close() // close connection at end of function
+	receiver, err := net.ListenUDP("udp", laddr)
+	CheckError(err)
+	defer receiver.Close()
 
+	raddr, err := net.ResolveUDPAddr("udp", config.SERVER_IP+":"+config.MEASURE_SERVER_PORT)
 	// send the start message, then wait for data
 	start := time.Now()
-	conn.Write([]byte(alg))
+	receiver.WriteToUDP([]byte(alg), raddr)
 	ch <- start
 
 	// loop to read bytes and send back to the server
 	for {
-		n, err := conn.Read(recvBuf)
+		n, raddr, err := receiver.ReadFromUDP(recvBuf)
 		if err != nil {
 			if err == io.EOF {
 				break
 			} else {
 				log.Error(err)
 			}
+		}
+		// TODO maybe do something better here
+		if string(recvBuf[:3]) == "end" {
+			break
 		}
 
 		// measure throughput
@@ -101,7 +108,8 @@ func measureUDP(alg string, ch chan<- time.Time) map[float64]float64 {
 		// TODO check if this works
 		if shouldEcho {
 			echo := SetHeaderVal(recvBuf[:n], config.RECEIVE_TIMESTAMP_START, binary.LittleEndian, elapsed(start))
-			conn.Write(echo.Bytes())
+			// TODO can just send back the recvbuf
+			receiver.WriteToUDP(echo.Bytes(), raddr)
 		}
 	}
 	ch <- time.Time{} // can stop sending pings
@@ -109,7 +117,7 @@ func measureUDP(alg string, ch chan<- time.Time) map[float64]float64 {
 }
 
 /*Starts a ping chain - stops when the other goroutine sends a message over a channel*/
-func sendPings(ch <-chan time.Time) map[float64]float64 {
+func sendPings(ch chan time.Time) map[float64]float64 {
 	rtt_dict := map[float64]float64{}
 	pingBuf := make([]byte, config.PING_SIZE_BYTES)
 	recvBuf := make([]byte, config.PING_SIZE_BYTES)
@@ -136,12 +144,13 @@ sendloop:
 			recv_timestamp := elapsed(start)
 			CheckError(err)
 			rtt_dict[send_timestamp] = (recv_timestamp - send_timestamp)
+			time.Sleep(time.Millisecond * 500)
 		}
 	}
 	return rtt_dict
 }
 
-func runExperiment(f func(alg string, ch chan<- time.Time) map[float64]float64, alg string, report *CCResults) {
+func runExperiment(f func(alg string, ch chan time.Time) map[float64]float64, alg string, report *CCResults) {
 	var wg sync.WaitGroup
 	end_ping := make(chan time.Time)
 	throughput := map[float64]float64{}
@@ -185,13 +194,14 @@ func main() {
 		Delay:      make(map[string]map[float64]float64),
 	}
 
-	for _, alg := range tcp_algorithms {
-		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
-		runExperiment(measureTCP, alg, &report)
-	}
 	for _, alg := range udp_algorithms {
 		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
 		runExperiment(measureUDP, alg, &report)
+	}
+	log.Info(report)
+	for _, alg := range tcp_algorithms {
+		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
+		runExperiment(measureTCP, alg, &report)
 	}
 	log.Info("all experiments finished")
 

@@ -8,9 +8,8 @@ import (
 )
 
 func SetHeaderVal(b []byte, offset int, order binary.ByteOrder, val interface{}) *bytes.Buffer {
-	p := bytes.NewBuffer(b)
-	p.Next(offset)
-	err := binary.Write(p, order, val)
+	p := bytes.NewBuffer(b[:offset])
+	err := binary.Write(p, order, val.(float64))
 	if err != nil {
 		log.Fatal("binary.write failed")
 	}
