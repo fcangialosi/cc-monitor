@@ -136,6 +136,7 @@ func handleRequestUDP(alg string, server *net.UDPConn, raddr *net.UDPAddr) {
 	port := strconv.Itoa(raddr.Port)
 	on_time := strconv.Itoa(config.MEAN_ON_TIME_MS)
 	off_time := strconv.Itoa(config.MEAN_OFF_TIME_MS)
+	num_cycles := strconv.Itoa(config.NUM_CYCLES)
 
 	switch alg {
 	case "remy":
@@ -145,7 +146,7 @@ func handleRequestUDP(alg string, server *net.UDPConn, raddr *net.UDPAddr) {
 			"onduration=" + on_time,
 			"offduration=" + off_time,
 			"cctype=remy",
-			"traffic_params=exponential,num_cycles=1",
+			"traffic_params=exponential,num_cycles=" + num_cycles,
 			"if=" + config.PATH_TO_REMY_CC,
 		}
 		// TODO remove stdout when done testing
