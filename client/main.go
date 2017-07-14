@@ -25,7 +25,7 @@ func elapsed(start time.Time) float64 {
 
 /*Used by both Remy and TCP*/
 func singleThroughputMeasurement(t float64, bytes_received float64) float64 {
-	return (bytes_received / config.BYTES_TO_MBITS) / t // returns in Mbps
+	return (bytes_received / config.BYTES_TO_MBITS) / (t / 1000) // returns in Mbps
 }
 
 /*Measure throughput at increments*/
@@ -38,7 +38,7 @@ func measureThroughput(start time.Time, bytes_received float64, m map[float64]fl
 		m[received] = singleThroughputMeasurement(received, time)
 		received *= 2
 	}
-	return received / 2 // return the last received throughput
+	return received // return the last received throughput
 }
 
 /*Sends start tcp message to server and records tcp throughput*/
@@ -71,8 +71,7 @@ func measureTCP(alg string, ch chan time.Time) map[float64]float64 {
 
 		// measure throughput
 		bytes_received += float64(n)
-		last_measured := measureThroughput(start, bytes_received, throughput_dict, next_measurement)
-		next_measurement = last_measured * 2
+		next_measurement = measureThroughput(start, bytes_received, throughput_dict, next_measurement)
 	}
 	ch <- time.Time{} // can stop sending pings
 	return throughput_dict
@@ -117,8 +116,7 @@ func measureUDP(alg string, ch chan time.Time) map[float64]float64 {
 
 		// measure throughput
 		bytes_received += float64(n)
-		last_measured := measureThroughput(start, bytes_received, throughput_dict, next_measurement)
-		next_measurement = last_measured * 2
+		next_measurement = measureThroughput(start, bytes_received, throughput_dict, next_measurement)
 
 		// echo packet with receive timestamp
 		if shouldEcho {
