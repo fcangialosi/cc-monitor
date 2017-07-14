@@ -111,7 +111,7 @@ func ping_server(wg sync.WaitGroup, start time.Time, ch <-chan bool) map[float64
 	CheckError(err)
 	defer conn.Close()
 	end := false
-	for end {
+	for !end {
 		select {
 		case <-ch:
 			end = true
