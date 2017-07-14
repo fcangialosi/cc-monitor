@@ -1,7 +1,7 @@
 package config
 
 // conversion
-const BYTES_TO_MBITS = 8000000
+const BYTES_TO_MBITS = .000008
 
 // IP
 const SERVER_IP = "127.0.0.1"
@@ -24,7 +24,7 @@ const MAX_REQ_SIZE = 128
 const TCP_CONGESTION = 0xd
 const MEAN_ON_TIME_MS = 10000
 const MEAN_OFF_TIME_MS = 3000
-const NUM_CYCLES = 5
+const NUM_CYCLES = 1
 const TRANSFER_BUF_SIZE = 2048
 const PATH_TO_GENERIC_CC = "/home/ubuntu/genericCC/sender"
 const PATH_TO_REMY_CC = "/home/ubuntu/cc-monitor/bigbertha-100x.dna.5"

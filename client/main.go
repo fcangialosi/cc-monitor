@@ -25,12 +25,11 @@ func elapsed(start time.Time) float64 {
 
 /*Used by both Remy and TCP*/
 func singleThroughputMeasurement(t float64, bytes_received float64) float64 {
-	return (bytes_received / config.BYTES_TO_MBITS) / (t / 1000) // returns in Mbps
+	return (bytes_received * config.BYTES_TO_MBITS) / (t / 1000) // returns in Mbps
 }
 
 /*Measure throughput at increments*/
 func measureThroughput(start time.Time, bytes_received float64, m map[float64]float64, next_measurement float64) float64 {
-	// check for last recorded * 2, * 2 again
 	time := elapsed(start)
 	received := next_measurement
 	for received <= bytes_received {
@@ -87,7 +86,6 @@ func measureUDP(alg string, ch chan time.Time) map[float64]float64 {
 
 	// create connection
 	laddr, err := net.ResolveUDPAddr("udp", ":98765")
-	CheckError(err)
 	receiver, err := net.ListenUDP("udp", laddr)
 	CheckError(err)
 	defer receiver.Close()
@@ -207,14 +205,14 @@ func main() {
 		Delay:      make(map[string]map[float64]float64),
 	}
 
-	for _, alg := range udp_algorithms {
-		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
-		runExperiment(measureUDP, alg, &report)
-	}
-	log.Info(report)
 	for _, alg := range tcp_algorithms {
 		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
 		runExperiment(measureTCP, alg, &report)
+	}
+	log.Info(report)
+	for _, alg := range udp_algorithms {
+		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
+		runExperiment(measureUDP, alg, &report)
 	}
 	log.Info("all experiments finished")
 
