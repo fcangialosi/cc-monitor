@@ -24,8 +24,21 @@ func elapsed(start time.Time) float64 {
 }
 
 /*Used by both Remy and TCP*/
-func throughput_so_far(start time.Time, bytes_received float64) float64 {
-	return (bytes_received / config.BYTES_TO_MBITS) / elapsed(start) // returns in Mbps
+func singleThroughputMeasurement(t float64, bytes_received float64) float64 {
+	return (bytes_received / config.BYTES_TO_MBITS) / t // returns in Mbps
+}
+
+/*Measure throughput at increments*/
+func measureThroughput(start time.Time, bytes_received float64, m map[float64]float64, next_measurement float64) float64 {
+	// check for last recorded * 2, * 2 again
+	time := elapsed(start)
+	received := next_measurement
+	for received <= bytes_received {
+		// add an entry into the map
+		m[received] = singleThroughputMeasurement(received, time)
+		received *= 2
+	}
+	return received / 2 // return the last received throughput
 }
 
 /*Sends start tcp message to server and records tcp throughput*/
@@ -36,6 +49,7 @@ func measureTCP(alg string, ch chan time.Time) map[float64]float64 {
 	throughput_dict := map[float64]float64{}
 	bytes_received := float64(0)
 	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
+	next_measurement := float64(1000)
 
 	conn, err := net.Dial("tcp", config.SERVER_IP+":"+config.MEASURE_SERVER_PORT)
 	CheckError(err)
@@ -57,8 +71,8 @@ func measureTCP(alg string, ch chan time.Time) map[float64]float64 {
 
 		// measure throughput
 		bytes_received += float64(n)
-		// TODO only do increments
-		throughput_dict[bytes_received] = throughput_so_far(start, bytes_received)
+		last_measured := measureThroughput(start, bytes_received, throughput_dict, next_measurement)
+		next_measurement = last_measured * 2
 	}
 	ch <- time.Time{} // can stop sending pings
 	return throughput_dict
@@ -70,6 +84,7 @@ func measureUDP(alg string, ch chan time.Time) map[float64]float64 {
 	bytes_received := float64(0)
 	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
 	shouldEcho := (alg == "remy")
+	next_measurement := float64(1000)
 
 	// create connection
 	laddr, err := net.ResolveUDPAddr("udp", ":98765")
@@ -79,6 +94,7 @@ func measureUDP(alg string, ch chan time.Time) map[float64]float64 {
 	defer receiver.Close()
 
 	raddr, err := net.ResolveUDPAddr("udp", config.SERVER_IP+":"+config.MEASURE_SERVER_PORT)
+	CheckError(err)
 	// send the start message, then wait for data
 	start := time.Now()
 	receiver.WriteToUDP([]byte(alg), raddr)
@@ -101,11 +117,10 @@ func measureUDP(alg string, ch chan time.Time) map[float64]float64 {
 
 		// measure throughput
 		bytes_received += float64(n)
-		// TODO only do increments
-		throughput_dict[bytes_received] = throughput_so_far(start, bytes_received)
+		last_measured := measureThroughput(start, bytes_received, throughput_dict, next_measurement)
+		next_measurement = last_measured * 2
 
 		// echo packet with receive timestamp
-		// TODO check if this works
 		if shouldEcho {
 			echo := SetHeaderVal(recvBuf[:n], config.RECEIVE_TIMESTAMP_START, binary.LittleEndian, elapsed(start))
 			// TODO can just send back the recvbuf
