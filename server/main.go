@@ -2,6 +2,7 @@ package main
 
 import (
 	"net"
+	"os/exec"
 	"syscall"
 	"time"
 
@@ -36,7 +37,7 @@ func pingServer() {
 
 }
 
-func measureServer() {
+func measureServerTCP() {
 	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.MEASURE_SERVER_PORT)
 	if err != nil {
 		log.Fatal(err)
@@ -52,11 +53,11 @@ func measureServer() {
 		if err != nil {
 			log.Warning(err)
 		}
-		go handleRequest(conn)
+		go handleRequestTCP(conn)
 	}
 }
 
-func handleRequest(conn *net.TCPConn) {
+func handleRequestTCP(conn *net.TCPConn) {
 	defer conn.Close()
 
 	reqBuf := make([]byte, config.MAX_REQ_SIZE)
@@ -69,7 +70,7 @@ func handleRequest(conn *net.TCPConn) {
 		return
 	}
 
-	req := string(reqBuf[:n-1])
+	req := string(reqBuf[:n])
 
 	switch req {
 	case "remy": // handle remy
@@ -107,6 +108,50 @@ func handleRequest(conn *net.TCPConn) {
 
 }
 
+func measureServerUDP() {
+	laddr, err := net.ResolveUDPAddr("udp", ":"+config.MEASURE_SERVER_PORT)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	server, err := net.ListenUDP("udp", laddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	reqBuf := make([]byte, config.MAX_REQ_SIZE)
+	for {
+		n, raddr, err := server.ReadFromUDP(reqBuf)
+		if err != nil {
+			log.Fatal(err)
+		}
+		go handleRequestUDP(string(reqBuf[:n]), raddr)
+	}
+}
+
+func handleRequestUDP(alg string, raddr *net.UDPAddr) {
+	ip := raddr.IP.String()
+	port := string(raddr.Port)
+
+	switch alg {
+	case "remy":
+		args := []string{
+			"serverip=" + ip,
+			"serverport=" + port,
+			"onduration=" + string(config.MEAN_ON_TIME_MS),
+			"offduration=" + string(config.MEAN_OFF_TIME_MS),
+			"cctype=remy",
+			"traffic_params=exponential",
+			"if=" + config.PATH_TO_REMY_CC,
+		}
+		if err := exec.Command(config.PATH_TO_GENERIC_CC, args...); err != nil {
+			log.Error(err)
+		}
+	default:
+		log.WithFields(log.Fields{"alg": alg}).Error("udp algorithm not implemented")
+	}
+}
+
 func dbServer() {
 	// TODO handle incoming reports, send them on channel to db worker
 }
@@ -119,7 +164,8 @@ func main() {
 	quit := make(chan struct{})
 
 	go pingServer()
-	go measureServer()
+	go measureServerTCP()
+	go measureServerUDP()
 	go dbServer()
 	go dbWorker()
 
