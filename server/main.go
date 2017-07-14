@@ -3,6 +3,7 @@ package main
 import (
 	"net"
 	"os/exec"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -131,15 +132,17 @@ func measureServerUDP() {
 
 func handleRequestUDP(alg string, raddr *net.UDPAddr) {
 	ip := raddr.IP.String()
-	port := string(raddr.Port)
+	port := strconv.Itoa(raddr.Port)
+	on_time := strconv.Itoa(config.MEAN_ON_TIME_MS)
+	off_time := strconv.Itoa(config.MEAN_OFF_TIME_MS)
 
 	switch alg {
 	case "remy":
 		args := []string{
 			"serverip=" + ip,
 			"serverport=" + port,
-			"onduration=" + string(config.MEAN_ON_TIME_MS),
-			"offduration=" + string(config.MEAN_OFF_TIME_MS),
+			"onduration=" + on_time,
+			"offduration=" + off_time,
 			"cctype=remy",
 			"traffic_params=exponential",
 			"if=" + config.PATH_TO_REMY_CC,
