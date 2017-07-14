@@ -69,14 +69,12 @@ func handleRequest(conn *net.TCPConn) {
 		return
 	}
 
-	req := string(reqBuf[:n])
-	log.Info("starting measurement", log.Fields{"alg": req})
+	req := string(reqBuf[:n-1])
 
 	switch req {
 	case "remy": // handle remy
 		// TODO launch genericc
 	default: // must be one of the tcps
-		// set cc alg
 		file, err := conn.File()
 		if err != nil {
 			log.Error(err)
@@ -89,16 +87,21 @@ func handleRequest(conn *net.TCPConn) {
 		off_dist := createExpDist(config.MEAN_OFF_TIME_MS, prng)
 
 		for i := 0; i < config.NUM_CYCLES; i++ {
+			on_time := time.Millisecond * time.Duration(on_dist.Sample())
+			on_timer := time.After(on_time)
 			// on
-			select {
-			case <-time.After(time.Millisecond * time.Duration(on_dist.Sample())):
-				break
-			default:
-				conn.Write(sendbuf)
+		sendloop:
+			for {
+				select {
+				case <-on_timer:
+					break sendloop
+				default:
+					conn.Write(sendbuf)
+				}
 			}
 
-			// off
-			<-time.After(time.Millisecond * time.Duration(off_dist.Sample()))
+			off_time := time.Millisecond * time.Duration(off_dist.Sample())
+			<-time.After(off_time)
 		}
 	}
 
