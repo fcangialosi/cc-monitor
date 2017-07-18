@@ -62,11 +62,10 @@ func measureTCP(alg string, ch chan time.Time) map[float64]float64 {
 	for {
 		n, err := conn.Read(recvBuf)
 		if err != nil {
-			if err == io.EOF {
-				break
-			} else {
-				log.Error(err)
-			}
+			log.Error(err)
+		}
+		if n <= 0 || n >= 3 && string(recvBuf[:n]) == config.FIN {
+			break
 		}
 
 		// measure throughput
