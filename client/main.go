@@ -220,14 +220,14 @@ func main() {
 		Delay:      make(map[string]map[float64]float64),
 	}
 
-	for _, alg := range tcp_algorithms {
-		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
-		runExperiment(measureTCP, alg, &report)
-	}
-	log.Info(report)
 	for _, alg := range udp_algorithms {
 		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
 		runExperiment(measureUDP, alg, &report)
+	}
+	log.Info(report)
+	for _, alg := range tcp_algorithms {
+		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
+		runExperiment(measureTCP, alg, &report)
 	}
 	log.Info("all experiments finished")
 
