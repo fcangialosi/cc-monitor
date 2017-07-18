@@ -113,7 +113,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 			<-time.After(off_time)
 		}
 	}
-
+	conn.Write([]byte(config.FIN))
 }
 
 func measureServerUDP() {
@@ -148,15 +148,6 @@ func handleRequestUDP(alg string, server *net.UDPConn, raddr *net.UDPAddr) {
 	// SYN-ACK
 	server.WriteToUDP([]byte(srcport), raddr)
 
-	// ACK
-	reqBuf := make([]byte, config.ACK_LEN)
-	n, raddr, err := server.ReadFromUDP(reqBuf)
-	if err != nil {
-		log.WithFields(log.Fields{"err": err}).Error("error receiving ACK from client")
-	}
-	if n >= config.ACK_LEN && string(reqBuf[:config.ACK_LEN]) != config.ACK {
-		log.WithFields(log.Fields{"got": reqBuf}).Error("error receiving ACK from client")
-	}
 	// Now we can start genericCC
 
 	switch alg {
