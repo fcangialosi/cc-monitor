@@ -31,10 +31,11 @@ func singleThroughputMeasurement(t float64, bytes_received float64) float64 {
 /*Measure throughput at increments*/
 func measureThroughput(start time.Time, bytes_received float64, m map[float64]float64, next_measurement float64) float64 {
 	time := elapsed(start)
+	log.WithFields(log.Fields{"mbps": singleThroughputMeasurement(time, bytes_received)}).Info()
 	received := next_measurement
 	for received <= bytes_received {
 		// add an entry into the map
-		m[received] = singleThroughputMeasurement(received, time)
+		m[received] = singleThroughputMeasurement(time, received)
 		received *= 2
 	}
 	return received // return the last received throughput
