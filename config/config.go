@@ -15,6 +15,7 @@ const RECEIVE_TIMESTAMP_END = 32
 const PING_SERVER_PORT = "10100"
 const MEASURE_SERVER_PORT = "10101"
 const DB_SERVER_PORT = "10102"
+const MAX_PORT = 65535
 
 // Ping server constants
 const PING_SIZE_BYTES = 1492
@@ -28,3 +29,8 @@ const NUM_CYCLES = 5
 const TRANSFER_BUF_SIZE = 2048
 const PATH_TO_GENERIC_CC = "/home/ubuntu/genericCC/sender"
 const PATH_TO_REMY_CC = "/home/ubuntu/cc-monitor/bigbertha-100x.dna.5"
+const INITIAL_X_VAL = 1000
+const FIN = "FIN"
+const ACK = "ACK"
+const FIN_LEN = 3
+const ACK_LEN = 3

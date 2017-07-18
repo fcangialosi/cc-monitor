@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math/rand"
 	"net"
 	"os"
 	"os/exec"
@@ -14,8 +15,13 @@ import (
 )
 
 var sendBuf []byte = make([]byte, config.TRANSFER_BUF_SIZE)
+var rng *rand.Rand
 
 /*****************************************************************************/
+
+func init() {
+	rng = rand.New(rand.NewSource(time.Now().UnixNano()))
+}
 
 func pingServer() {
 	p := make([]byte, config.PING_SIZE_BYTES)
@@ -138,11 +144,27 @@ func handleRequestUDP(alg string, server *net.UDPConn, raddr *net.UDPAddr) {
 	off_time := strconv.Itoa(config.MEAN_OFF_TIME_MS)
 	num_cycles := strconv.Itoa(config.NUM_CYCLES)
 
+	srcport := strconv.Itoa(rng.Intn(config.MAX_PORT-1025) + 1025)
+	// SYN-ACK
+	server.WriteToUDP([]byte(srcport), raddr)
+
+	// ACK
+	reqBuf := make([]byte, config.ACK_LEN)
+	n, raddr, err := server.ReadFromUDP(reqBuf)
+	if err != nil {
+		log.WithFields(log.Fields{"err": err}).Error("error receiving ACK from client")
+	}
+	if n >= config.ACK_LEN && string(reqBuf[:config.ACK_LEN]) != config.ACK {
+		log.WithFields(log.Fields{"got": reqBuf}).Error("error receiving ACK from client")
+	}
+	// Now we can start genericCC
+
 	switch alg {
 	case "remy":
 		args := []string{
 			"serverip=" + ip,
 			"serverport=" + port,
+			"sourceport=" + srcport,
 			"onduration=" + on_time,
 			"offduration=" + off_time,
 			"cctype=remy",
@@ -155,7 +177,7 @@ func handleRequestUDP(alg string, server *net.UDPConn, raddr *net.UDPAddr) {
 		if err := cmd.Run(); err != nil {
 			log.Error(err)
 		}
-		server.WriteToUDP([]byte("end"), raddr)
+		server.WriteToUDP([]byte(config.FIN), raddr)
 	default:
 		log.WithFields(log.Fields{"alg": alg}).Error("udp algorithm not implemented")
 	}

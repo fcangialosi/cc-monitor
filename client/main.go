@@ -83,7 +83,7 @@ func measureUDP(alg string, ch chan time.Time) map[float64]float64 {
 	bytes_received := float64(0)
 	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
 	shouldEcho := (alg == "remy")
-	next_measurement := float64(1000)
+	next_measurement := float64(config.INITIAL_X_VAL)
 
 	// create connection
 	laddr, err := net.ResolveUDPAddr("udp", ":98765")
@@ -93,14 +93,29 @@ func measureUDP(alg string, ch chan time.Time) map[float64]float64 {
 
 	raddr, err := net.ResolveUDPAddr("udp", config.SERVER_IP+":"+config.MEASURE_SERVER_PORT)
 	CheckError(err)
-	// send the start message, then wait for data
-	start := time.Now()
+	// SYN : this is the algorithm we want the server to test on us
 	receiver.WriteToUDP([]byte(alg), raddr)
-	ch <- start
+
+	// SYN-ACK : this is the port generiCC will be run on
+	n, raddr, err := receiver.ReadFromUDP(recvBuf)
+	gcc := string(recvBuf[:n])
+	gccAddr, err := net.ResolveUDPAddr("udp", gcc)
+	CheckError(err)
+
+	// punch hole in NAT for genericCC
+	// ACK : also tell server its now allowed to start genericCC
+	receiver.WriteToUDP([]byte(config.ACK), gccAddr)
 
 	// loop to read bytes and send back to the server
+	start := time.Time{}
 	for {
 		n, raddr, err := receiver.ReadFromUDP(recvBuf)
+		// don't start the timer until we've receied the first byte
+		// TODO maybe add one RTT here
+		if start.IsZero() {
+			start = time.Now()
+			ch <- start
+		}
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -108,8 +123,7 @@ func measureUDP(alg string, ch chan time.Time) map[float64]float64 {
 				log.Error(err)
 			}
 		}
-		// TODO maybe do something better here
-		if string(recvBuf[:3]) == "end" {
+		if string(recvBuf[:config.FIN_LEN]) == config.FIN {
 			break
 		}
 
