@@ -98,8 +98,8 @@ func measureUDP(alg string, ch chan time.Time) map[float64]float64 {
 
 	// SYN-ACK : this is the port generiCC will be run on
 	n, raddr, err := receiver.ReadFromUDP(recvBuf)
-	gcc := string(recvBuf[:n])
-	gccAddr, err := net.ResolveUDPAddr("udp", gcc)
+	gccPort := string(recvBuf[:n])
+	gccAddr, err := net.ResolveUDPAddr("udp", config.SERVER_IP+":"+gccPort)
 	CheckError(err)
 
 	// punch hole in NAT for genericCC
