@@ -103,8 +103,9 @@ func measureUDP(alg string, ch chan time.Time) map[float64]float64 {
 	CheckError(err)
 
 	// punch hole in NAT for genericCC
-	// ACK : also tell server its now allowed to start genericCC
 	receiver.WriteToUDP([]byte(config.ACK), gccAddr)
+	// ACK : also tell server its now allowed to start genericCC
+	receiver.WriteToUDP([]byte("open seasame"), raddr)
 
 	// loop to read bytes and send back to the server
 	start := time.Time{}
