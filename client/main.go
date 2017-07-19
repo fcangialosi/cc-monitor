@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"io"
 	"net"
+	"sort"
 	"sync"
 	"time"
 
@@ -31,7 +32,7 @@ func singleThroughputMeasurement(t float64, bytes_received float64) float64 {
 /*Measure throughput at increments*/
 func measureThroughput(start time.Time, bytes_received float64, m map[float64]float64, next_measurement float64) float64 {
 	time := elapsed(start)
-	log.WithFields(log.Fields{"mbps": singleThroughputMeasurement(time, bytes_received)}).Info()
+	// log.WithFields(log.Fields{"mbps": singleThroughputMeasurement(time, bytes_received)}).Info()
 	received := next_measurement
 	for received <= bytes_received {
 		// add an entry into the map
@@ -45,7 +46,7 @@ func measureThroughput(start time.Time, bytes_received float64, m map[float64]fl
 // NOTE: this function is basically a copy of start_remy, except I didn't want them to use the same function,
 // because the remy function requires the echo packet step, and I didn't want to add a condition to check for - if it's tcp or remy (unnecessary time)
 
-func measureTCP(alg string, ch chan time.Time) map[float64]float64 {
+func measureTCP(alg string, start_ch chan time.Time, end_ch chan time.Time) map[float64]float64 {
 	throughput_dict := map[float64]float64{}
 	bytes_received := float64(0)
 	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
@@ -57,7 +58,7 @@ func measureTCP(alg string, ch chan time.Time) map[float64]float64 {
 
 	start := time.Now()
 	conn.Write([]byte(alg))
-	ch <- start
+	start_ch <- start
 
 	for {
 		n, err := conn.Read(recvBuf)
@@ -72,12 +73,12 @@ func measureTCP(alg string, ch chan time.Time) map[float64]float64 {
 		bytes_received += float64(n)
 		next_measurement = measureThroughput(start, bytes_received, throughput_dict, next_measurement)
 	}
-	ch <- time.Time{} // can stop sending pings
+	end_ch <- time.Time{} // can stop sending pings
 	return throughput_dict
 }
 
 /*Very similar to start tcp, except sends back a packet with the rec. timestamp*/
-func measureUDP(alg string, ch chan time.Time) map[float64]float64 {
+func measureUDP(alg string, start_ch chan time.Time, end_ch chan time.Time) map[float64]float64 {
 	throughput_dict := map[float64]float64{} // returns a map of bytes so far to throughput at that time
 	bytes_received := float64(0)
 	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
@@ -108,13 +109,17 @@ func measureUDP(alg string, ch chan time.Time) map[float64]float64 {
 
 	// loop to read bytes and send back to the server
 	start := time.Time{}
+	start_ping := true
 	for {
+		// log.Warn("Reading from recv buf in measure UDP")
 		n, raddr, err := receiver.ReadFromUDP(recvBuf)
 		// don't start the timer until we've receied the first byte
 		// TODO maybe add one RTT here
-		if start.IsZero() {
+		if start_ping {
+			log.Info("start ping is true")
 			start = time.Now()
-			ch <- start
+			start_ch <- start
+			start_ping = false
 		}
 		if err != nil {
 			if err == io.EOF {
@@ -124,6 +129,7 @@ func measureUDP(alg string, ch chan time.Time) map[float64]float64 {
 			}
 		}
 		if string(recvBuf[:config.FIN_LEN]) == config.FIN {
+			log.Info("Received FIN")
 			break
 		}
 
@@ -138,12 +144,15 @@ func measureUDP(alg string, ch chan time.Time) map[float64]float64 {
 			receiver.WriteToUDP(echo.Bytes(), raddr)
 		}
 	}
-	ch <- time.Time{} // can stop sending pings
+	log.Info("Trying to end signal to stop sending pings channel")
+	end_ch <- time.Time{} // can stop sending pings
+	log.Info("Returning from the UDP thing")
 	return throughput_dict
 }
 
 /*Starts a ping chain - stops when the other goroutine sends a message over a channel*/
-func sendPings(ch chan time.Time) map[float64]float64 {
+func sendPings(start_ch chan time.Time, end_ch chan time.Time, protocol string, port string) map[float64]float64 {
+	log.Info("entering the send ping function")
 	rtt_dict := map[float64]float64{}
 	pingBuf := make([]byte, config.PING_SIZE_BYTES)
 	recvBuf := make([]byte, config.PING_SIZE_BYTES)
@@ -151,33 +160,59 @@ func sendPings(ch chan time.Time) map[float64]float64 {
 	// create tcp connection to the server
 	// TODO this should probably use tcp/udp depending on which algorithm is running
 	// TODO but need to support this on the server as well, for now just udp
-	conn, err := net.Dial("udp", config.SERVER_IP+":"+config.PING_SERVER_PORT)
-	CheckError(err)
-	defer conn.Close()
+	// conn, err := net.Dial("udp", config.SERVER_IP+":"+config.PING_SERVER_PORT)
+	// CheckError(err)
+	// defer conn.Close()
+	var mutex = &sync.Mutex{}
 
 	// wait for measurement to start
-	start := <-ch
-
+	log.Info("waiting to receive go in ping function")
+	start := <-start_ch
+	log.Info("Got start to send pings")
 sendloop:
 	for {
 		select {
-		case <-ch:
+		case <-end_ch:
+			log.Debug("Got signal to end pings")
 			break sendloop
 		default:
-			send_timestamp := elapsed(start)
-			conn.Write(pingBuf)
-			_, err := conn.Read(recvBuf)
-			recv_timestamp := elapsed(start)
-			CheckError(err)
-			rtt_dict[send_timestamp] = (recv_timestamp - send_timestamp)
-			time.Sleep(time.Millisecond * 500)
+			go func(m map[float64]float64) {
+				mutex.Lock()
+				c, err := net.Dial(protocol, config.SERVER_IP+":"+port)
+				defer c.Close()
+				CheckError(err)
+				// log.Info("Waiting to write ping")
+				c.Write(pingBuf)
+				send_timestamp := elapsed(start)
+				// log.Info("Waiting to read from ping buf")
+				_, err = c.Read(recvBuf)
+				recv_timestamp := elapsed(start)
+				CheckError(err)
+				rtt := (recv_timestamp - send_timestamp)
+				// mutex.Lock()
+				m[send_timestamp] = rtt
+				mutex.Unlock()
+				log.WithFields(log.Fields{"protocol": protocol, "rtt": rtt, "sent": send_timestamp}).Warn("Ping Info")
+			}(rtt_dict)
 		}
+		time.Sleep(time.Millisecond * 3000)
+	}
+	var keys []float64
+	for k := range rtt_dict {
+		log.Info(k)
+		keys = append(keys, k)
+	}
+	sort.Float64s(keys)
+	log.Info("Returning from send ping function")
+	for k := range keys {
+		log.WithFields(log.Fields{"send time": keys[k], "rtt": rtt_dict[keys[k]]}).Info("rtt dict")
 	}
 	return rtt_dict
 }
 
-func runExperiment(f func(alg string, ch chan time.Time) map[float64]float64, alg string, report *CCResults) {
+func runExperiment(f func(alg string, start_ch chan time.Time, end_ch chan time.Time) map[float64]float64, alg string, report *CCResults, protocol string, port string) {
 	var wg sync.WaitGroup
+	start_ping := make(chan time.Time)
 	end_ping := make(chan time.Time)
 	throughput := map[float64]float64{}
 	ping_results := map[float64]float64{}
@@ -185,13 +220,13 @@ func runExperiment(f func(alg string, ch chan time.Time) map[float64]float64, al
 	wg.Add(1)
 	go func(wg *sync.WaitGroup) {
 		defer wg.Done()
-		throughput = f(alg, end_ping)
+		throughput = f(alg, start_ping, end_ping)
 	}(&wg)
 
 	wg.Add(1)
 	go func(wg *sync.WaitGroup) {
 		defer wg.Done()
-		ping_results = sendPings(end_ping)
+		ping_results = sendPings(start_ping, end_ping, protocol, port)
 	}(&wg)
 
 	wg.Wait()
@@ -222,14 +257,17 @@ func main() {
 
 	for _, alg := range udp_algorithms {
 		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
-		runExperiment(measureUDP, alg, &report)
+		runExperiment(measureUDP, alg, &report, "udp", config.PING_UDP_SERVER_PORT)
 	}
-	log.Info(report)
+	log.Debug("Finished UDP algorithms")
 	for _, alg := range tcp_algorithms {
 		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
-		runExperiment(measureTCP, alg, &report)
+		runExperiment(measureTCP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT)
 	}
+
+	log.Debug("Finished TCP algorithms")
 	log.Info("all experiments finished")
+	// print the reports
 
 	log.Info("sending report")
 	sendReport(report.encode())
