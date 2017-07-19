@@ -94,7 +94,7 @@ func measureServerTCP() {
 
 func handleRequestTCP(conn *net.TCPConn) {
 	defer conn.Close()
-
+	startBuf := []byte("START_FLOW")
 	reqBuf := make([]byte, config.MAX_REQ_SIZE)
 	n, err := conn.Read(reqBuf)
 	if err != nil {
@@ -125,7 +125,8 @@ func handleRequestTCP(conn *net.TCPConn) {
 		for i := 0; i < config.NUM_CYCLES; i++ {
 			on_time := time.Millisecond * time.Duration(on_dist.Sample())
 			on_timer := time.After(on_time)
-			// on
+			// on - send start flow message
+			conn.Write(startBuf)
 		sendloop:
 			for {
 				select {
