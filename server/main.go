@@ -22,11 +22,34 @@ var rng *rand.Rand
 func init() {
 	rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 }
+func pingServerTCP() {
+	p := make([]byte, config.PING_SIZE_BYTES)
+	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.PING_TCP_SERVER_PORT)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-func pingServer() {
+	server, err := net.ListenTCP("tcp", laddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for {
+		conn, err := server.AcceptTCP()
+		if err != nil {
+			log.Warning(err)
+		}
+		go func(c *net.TCPConn, buf []byte) {
+			defer conn.Close()
+			conn.Write(p)
+		}(conn, p)
+	}
+}
+
+func pingServerUDP() {
 	p := make([]byte, config.PING_SIZE_BYTES)
 
-	laddr, err := net.ResolveUDPAddr("udp", ":"+config.PING_SERVER_PORT)
+	laddr, err := net.ResolveUDPAddr("udp", ":"+config.PING_UDP_SERVER_PORT)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -36,11 +59,15 @@ func pingServer() {
 	}
 
 	for {
+		//log.Warn("reading from ping server")
 		_, raddr, err := server.ReadFromUDP(p)
 		if err != nil {
 			log.Fatal(err)
 		}
-		server.WriteToUDP(p, raddr)
+		go func(s *net.UDPConn, addr *net.UDPAddr, buf []byte) {
+			log.WithFields(log.Fields{"IP": addr.IP, "Port": addr.Port}).Info("Writing back ping channel")
+			s.WriteToUDP(buf, addr)
+		}(server, raddr, p)
 	}
 
 }
@@ -138,6 +165,7 @@ func measureServerUDP() {
 }
 
 func handleRequestUDP(alg string, server *net.UDPConn, raddr *net.UDPAddr) {
+	os.Setenv("MIN_RTT", "150")
 	ip := raddr.IP.String()
 	port := strconv.Itoa(raddr.Port)
 	on_time := strconv.Itoa(config.MEAN_ON_TIME_MS)
@@ -149,7 +177,7 @@ func handleRequestUDP(alg string, server *net.UDPConn, raddr *net.UDPAddr) {
 	server.WriteToUDP([]byte(srcport), raddr)
 
 	// Now we can start genericCC
-
+	// set MIN_RTT env variable
 	switch alg {
 	case "remy":
 		args := []string{
@@ -168,10 +196,11 @@ func handleRequestUDP(alg string, server *net.UDPConn, raddr *net.UDPAddr) {
 		if err := cmd.Run(); err != nil {
 			log.Error(err)
 		}
-		server.WriteToUDP([]byte(config.FIN), raddr)
+		// server.WriteToUDP([]byte(config.FIN), raddr)
 	default:
 		log.WithFields(log.Fields{"alg": alg}).Error("udp algorithm not implemented")
 	}
+	log.Info("Finished handling request UDP")
 }
 
 func dbServer() {
@@ -185,7 +214,8 @@ func dbWorker() {
 func main() {
 	quit := make(chan struct{})
 
-	go pingServer()
+	go pingServerUDP()
+	go pingServerTCP()
 	go measureServerTCP()
 	go measureServerUDP()
 	go dbServer()
