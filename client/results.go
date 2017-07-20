@@ -10,7 +10,7 @@ import (
 type CCResults struct {
 	Throughput map[string]([]map[float64]float64)
 	Delay      map[string]map[float64]float64
-	FlowTimes  map[string][]float64 // list of times when the flows "on" started
+	FlowTimes  map[string][]map[string]float64 // list of times when the flows "on" started
 }
 
 /*Encodes the inner CC results struct*/

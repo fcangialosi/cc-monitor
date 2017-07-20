@@ -37,3 +37,5 @@ const FIN_LEN = 3
 const ACK_LEN = 3
 const START_FLOW = "START_FLOW"
 const START_FLOW_LEN = 10
+const START = "START"
+const END = "END"

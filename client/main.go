@@ -45,16 +45,20 @@ func measureThroughput(start time.Time, bytes_received float64, m map[float64]fl
 // NOTE: this function is basically a copy of start_remy, except I didn't want them to use the same function,
 // because the remy function requires the echo packet step, and I didn't want to add a condition to check for - if it's tcp or remy (unnecessary time)
 
-func measureTCP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []float64) {
+func measureTCP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []map[string]float64) {
 	flow_throughputs := make([]map[float64]float64, config.NUM_CYCLES)
 	bytes_received := float64(0)
 	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
 	next_measurement := float64(1000)
-	flow_times := make([]float64, config.NUM_CYCLES)
+	flow_times := make([]map[string]float64, config.NUM_CYCLES)
 	current_flow := -1
+	end_flow_times := make([]float64, config.NUM_CYCLES+1)
 	k := 0
 	for k < config.NUM_CYCLES {
 		flow_throughputs[k] = map[float64]float64{}
+		flow_times[k] = map[string]float64{}
+		flow_times[k][config.START] = float64(0)
+		flow_times[k][config.END] = float64(0)
 		k++
 	}
 
@@ -64,6 +68,7 @@ func measureTCP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]m
 
 	start := time.Now()
 	original_start := start
+	last_received_time := elapsed(start)
 	conn.Write([]byte(alg))
 	start_ch <- start
 
@@ -73,12 +78,13 @@ func measureTCP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]m
 			log.Error(err)
 		}
 		if n <= 0 || n >= 3 && string(recvBuf[:n]) == config.FIN {
+			end_flow_times[current_flow+1] = last_received_time // last last recieved time
 			break
 		}
 		if string(recvBuf[:config.START_FLOW_LEN]) == config.START_FLOW {
 			current_flow++
-			flow_times[current_flow] = elapsed(original_start)
-			log.Info("Received START FLOW GOTTA START A NEW ONE")
+			flow_times[current_flow][config.START] = elapsed(original_start)
+			end_flow_times[current_flow] = last_received_time
 			bytes_received = 0
 			start = time.Now()
 			next_measurement = 1000 // reset to 1KB
@@ -86,24 +92,34 @@ func measureTCP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]m
 
 		// measure throughput
 		bytes_received += float64(n)
+		last_received_time = elapsed(original_start)
 		next_measurement = measureThroughput(start, bytes_received, flow_throughputs[current_flow], next_measurement)
 	}
 	end_ch <- time.Time{} // can stop sending pings
+	i := 0
+	for i < config.NUM_CYCLES {
+		flow_times[i][config.END] = end_flow_times[i+1]
+		i++
+	}
 	return flow_throughputs, flow_times
 }
 
 /*Very similar to start tcp, except sends back a packet with the rec. timestamp*/
-func measureUDP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []float64) {
+func measureUDP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []map[string]float64) {
 	flow_throughputs := make([]map[float64]float64, config.NUM_CYCLES)
 	bytes_received := float64(0)
 	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
 	shouldEcho := (alg == "remy")
 	next_measurement := float64(config.INITIAL_X_VAL)
-	flow_times := make([]float64, config.NUM_CYCLES)
+	flow_times := make([]map[string]float64, config.NUM_CYCLES)
+	end_flow_times := make([]float64, config.NUM_CYCLES+1)
 	current_flow := -1
 	k := 0
 	for k < config.NUM_CYCLES {
 		flow_throughputs[k] = map[float64]float64{}
+		flow_times[k] = map[string]float64{}
+		flow_times[k][config.START] = float64(0)
+		flow_times[k][config.END] = float64(0)
 		k++
 	}
 
@@ -130,8 +146,9 @@ func measureUDP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]m
 	// receiver.WriteToUDP([]byte(config.ACK), raddr)
 
 	// loop to read bytes and send back to the server
-	start := time.Time{}
+	start := time.Now()
 	original_start := start
+	last_received_time := elapsed(start)
 	start_ping := true
 	for {
 		// log.Warn("Reading from recv buf in measure UDP")
@@ -153,12 +170,14 @@ func measureUDP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]m
 		}
 		if string(recvBuf[:config.FIN_LEN]) == config.FIN {
 			log.Info("Received FIN")
+			end_flow_times[current_flow+1] = last_received_time // last end flow time
 			break
 		}
 		if string(recvBuf[:config.START_FLOW_LEN]) == config.START_FLOW {
 			current_flow++
-			flow_times[current_flow] = elapsed(original_start)
-			log.Info("Received START FLOW GOTTA START A NEW ONE")
+			flow_times[current_flow][config.START] = elapsed(original_start)
+			end_flow_times[current_flow] = last_received_time
+			log.WithFields(log.Fields{"last received": last_received_time, "current": elapsed(original_start)}).Info("Received START FLOW GOTTA START A NEW ONE")
 			bytes_received = 0
 			next_measurement = 1000 // reset to 1KB
 			start = time.Now()
@@ -166,6 +185,7 @@ func measureUDP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]m
 
 		// measure throughput
 		bytes_received += float64(n)
+		last_received_time = elapsed(original_start)
 		next_measurement = measureThroughput(start, bytes_received, flow_throughputs[current_flow], next_measurement)
 
 		// echo packet with receive timestamp
@@ -178,6 +198,11 @@ func measureUDP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]m
 	log.Info("Trying to end signal to stop sending pings channel")
 	end_ch <- time.Time{} // can stop sending pings
 	log.Info("Returning from the UDP thing")
+	i := 0
+	for i < config.NUM_CYCLES {
+		flow_times[i][config.END] = end_flow_times[i+1]
+		i++
+	}
 	return flow_throughputs, flow_times
 }
 
@@ -231,12 +256,12 @@ sendloop:
 	return rtt_dict
 }
 
-func runExperiment(f func(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []float64), alg string, report *CCResults, protocol string, port string) {
+func runExperiment(f func(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []map[string]float64), alg string, report *CCResults, protocol string, port string) {
 	var wg sync.WaitGroup
 	start_ping := make(chan time.Time)
 	end_ping := make(chan time.Time)
 	throughput := make([]map[float64]float64, config.NUM_CYCLES)
-	flow_times := make([]float64, config.NUM_CYCLES)
+	flow_times := make([]map[string]float64, config.NUM_CYCLES)
 	ping_results := map[float64]float64{}
 
 	wg.Add(1)
@@ -276,7 +301,7 @@ func main() {
 	report := CCResults{
 		Throughput: make(map[string]([]map[float64]float64)),
 		Delay:      make(map[string]map[float64]float64),
-		FlowTimes:  make(map[string][]float64)}
+		FlowTimes:  make(map[string][]map[string]float64)}
 
 	for _, alg := range udp_algorithms {
 		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
@@ -284,6 +309,9 @@ func main() {
 		for ind, val := range report.Throughput[alg] {
 			log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
 			log.WithFields(log.Fields{"throughput dict": val}).Info("Dict")
+		}
+		for ind, val := range report.FlowTimes[alg] {
+			log.WithFields(log.Fields{"flow number": ind, "flow start": val[config.START], "flow end": val[config.END]}).Info("Flow times")
 		}
 	}
 	log.Debug("Finished UDP algorithms")
@@ -293,6 +321,9 @@ func main() {
 		for ind, val := range report.Throughput[alg] {
 			log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
 			log.WithFields(log.Fields{"throughput dict": val}).Info("Dict")
+		}
+		for ind, val := range report.FlowTimes[alg] {
+			log.WithFields(log.Fields{"flow number": ind, "flow start": val[config.START], "flow end": val[config.END]}).Info("Flow times")
 		}
 	}
 
