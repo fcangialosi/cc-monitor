@@ -45,11 +45,12 @@ func measureThroughput(start time.Time, bytes_received float64, m map[float64]fl
 // NOTE: this function is basically a copy of start_remy, except I didn't want them to use the same function,
 // because the remy function requires the echo packet step, and I didn't want to add a condition to check for - if it's tcp or remy (unnecessary time)
 
-func measureTCP(alg string, start_ch chan time.Time, end_ch chan time.Time) []map[float64]float64 {
+func measureTCP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []float64) {
 	flow_throughputs := make([]map[float64]float64, config.NUM_CYCLES)
 	bytes_received := float64(0)
 	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
 	next_measurement := float64(1000)
+	flow_times := make([]float64, config.NUM_CYCLES)
 	current_flow := -1
 	k := 0
 	for k < config.NUM_CYCLES {
@@ -62,6 +63,7 @@ func measureTCP(alg string, start_ch chan time.Time, end_ch chan time.Time) []ma
 	defer conn.Close()
 
 	start := time.Now()
+	original_start := start
 	conn.Write([]byte(alg))
 	start_ch <- start
 
@@ -75,6 +77,7 @@ func measureTCP(alg string, start_ch chan time.Time, end_ch chan time.Time) []ma
 		}
 		if string(recvBuf[:config.START_FLOW_LEN]) == config.START_FLOW {
 			current_flow++
+			flow_times[current_flow] = elapsed(original_start)
 			log.Info("Received START FLOW GOTTA START A NEW ONE")
 			bytes_received = 0
 			start = time.Now()
@@ -86,16 +89,17 @@ func measureTCP(alg string, start_ch chan time.Time, end_ch chan time.Time) []ma
 		next_measurement = measureThroughput(start, bytes_received, flow_throughputs[current_flow], next_measurement)
 	}
 	end_ch <- time.Time{} // can stop sending pings
-	return flow_throughputs
+	return flow_throughputs, flow_times
 }
 
 /*Very similar to start tcp, except sends back a packet with the rec. timestamp*/
-func measureUDP(alg string, start_ch chan time.Time, end_ch chan time.Time) []map[float64]float64 {
+func measureUDP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []float64) {
 	flow_throughputs := make([]map[float64]float64, config.NUM_CYCLES)
 	bytes_received := float64(0)
 	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
 	shouldEcho := (alg == "remy")
 	next_measurement := float64(config.INITIAL_X_VAL)
+	flow_times := make([]float64, config.NUM_CYCLES)
 	current_flow := -1
 	k := 0
 	for k < config.NUM_CYCLES {
@@ -127,6 +131,7 @@ func measureUDP(alg string, start_ch chan time.Time, end_ch chan time.Time) []ma
 
 	// loop to read bytes and send back to the server
 	start := time.Time{}
+	original_start := start
 	start_ping := true
 	for {
 		// log.Warn("Reading from recv buf in measure UDP")
@@ -152,6 +157,7 @@ func measureUDP(alg string, start_ch chan time.Time, end_ch chan time.Time) []ma
 		}
 		if string(recvBuf[:config.START_FLOW_LEN]) == config.START_FLOW {
 			current_flow++
+			flow_times[current_flow] = elapsed(original_start)
 			log.Info("Received START FLOW GOTTA START A NEW ONE")
 			bytes_received = 0
 			next_measurement = 1000 // reset to 1KB
@@ -172,7 +178,7 @@ func measureUDP(alg string, start_ch chan time.Time, end_ch chan time.Time) []ma
 	log.Info("Trying to end signal to stop sending pings channel")
 	end_ch <- time.Time{} // can stop sending pings
 	log.Info("Returning from the UDP thing")
-	return flow_throughputs
+	return flow_throughputs, flow_times
 }
 
 /*Starts a ping chain - stops when the other goroutine sends a message over a channel*/
@@ -225,17 +231,18 @@ sendloop:
 	return rtt_dict
 }
 
-func runExperiment(f func(alg string, start_ch chan time.Time, end_ch chan time.Time) []map[float64]float64, alg string, report *CCResults, protocol string, port string) {
+func runExperiment(f func(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []float64), alg string, report *CCResults, protocol string, port string) {
 	var wg sync.WaitGroup
 	start_ping := make(chan time.Time)
 	end_ping := make(chan time.Time)
 	throughput := make([]map[float64]float64, config.NUM_CYCLES)
+	flow_times := make([]float64, config.NUM_CYCLES)
 	ping_results := map[float64]float64{}
 
 	wg.Add(1)
 	go func(wg *sync.WaitGroup) {
 		defer wg.Done()
-		throughput = f(alg, start_ping, end_ping)
+		throughput, flow_times = f(alg, start_ping, end_ping)
 	}(&wg)
 
 	wg.Add(1)
@@ -247,6 +254,7 @@ func runExperiment(f func(alg string, start_ch chan time.Time, end_ch chan time.
 	wg.Wait()
 
 	report.Throughput[alg] = throughput
+	report.FlowTimes[alg] = flow_times
 	report.Delay[alg] = ping_results
 }
 
@@ -268,7 +276,7 @@ func main() {
 	report := CCResults{
 		Throughput: make(map[string]([]map[float64]float64)),
 		Delay:      make(map[string]map[float64]float64),
-	}
+		FlowTimes:  make(map[string][]float64)}
 
 	for _, alg := range udp_algorithms {
 		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")

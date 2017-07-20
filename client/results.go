@@ -10,6 +10,7 @@ import (
 type CCResults struct {
 	Throughput map[string]([]map[float64]float64)
 	Delay      map[string]map[float64]float64
+	FlowTimes  map[string][]float64 // list of times when the flows "on" started
 }
 
 /*Encodes the inner CC results struct*/
@@ -18,6 +19,7 @@ func (cc *CCResults) encode() []byte {
 	e := gob.NewEncoder(w)
 	e.Encode(cc.Throughput)
 	e.Encode(cc.Delay)
+	e.Encode(cc.FlowTimes)
 	return w.Bytes()
 }
 
@@ -30,5 +32,6 @@ func decodeCCResults(data []byte) CCResults {
 	d := gob.NewDecoder(r)
 	d.Decode(&results.Throughput)
 	d.Decode(&results.Delay)
+	d.Decode(&results.FlowTimes)
 	return results
 }
