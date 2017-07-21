@@ -13,6 +13,7 @@ const DB_NAME = "cc_test_data"
 const DB_TABLE_NAME = "cc_results"
 const DB_USERNAME = "user"
 const DB_PASSWORD = "password"
+const IP_LIST_LOCATION = "/home/ubuntu/ip.txt"
 
 // HEADER
 const HEADER_SIZE = 32
@@ -24,6 +25,7 @@ const PING_UDP_SERVER_PORT = "10100"
 const PING_TCP_SERVER_PORT = "10101"
 const MEASURE_SERVER_PORT = "10102"
 const DB_SERVER_PORT = "10103"
+const IP_SERVER_PORT = "10104"
 const MAX_PORT = 65535
 
 // Ping server constants

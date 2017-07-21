@@ -4,13 +4,55 @@ import (
 	"database/sql"
 	"io"
 	"net"
-
+  "bufio"
 	"../config"
+  "os"
 	"../results"
 	_ "github.com/go-sql-driver/mysql"
 	log "github.com/sirupsen/logrus"
 )
 
+func getIPList(ip_file string) []string {
+  ip_list := make([]string, 0)
+  file, err := os.Open(ip_file)
+  defer file.Close()
+  checkError(err)
+  scanner := bufio.NewScanner(file)
+  for scanner.Scan() {
+    ip := scanner.Text()
+    ip_list = append(ip_list, ip)
+    log.WithFields(log.Fields{"IP": ip}).Info("IP LIST")
+  }
+  checkError(scanner.Err())
+  return ip_list
+}
+func introServer(ip_file string) {
+
+
+	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.DB_SERVER_PORT)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	server, err := net.ListenTCP("tcp", laddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for {
+		conn, err := server.AcceptTCP()
+    checkError(err)
+    go func(c *net.TCPConn) {
+      p := make([]byte, config.LARGE_BUF_SIZE)
+      defer conn.Close()
+      ip_list := getIPList(ip_file)
+      // send it back to the server
+      conn.Read(p)
+      conn.Write(results.EncodeIPList(ip_list))
+    }(conn)
+  }
+
+}
 func dbServer(ch chan results.CCResults) {
   log.Info("In db server function")
 	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.DB_SERVER_PORT)
@@ -92,7 +134,7 @@ func checkError(err error) {
 /*This file is for solely handling the database*/
 func main() {
 	quit := make(chan struct{})
-  log.Info("main is happening")
+  go introServer(config.IP_LIST_LOCATION)
 	db_channel := make(chan results.CCResults)
 	go dbServer(db_channel)
 	go dbWorker(db_channel)
