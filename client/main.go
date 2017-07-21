@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"../config"
+	"../results"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -256,7 +257,7 @@ sendloop:
 	return rtt_dict
 }
 
-func runExperiment(f func(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []map[string]float64), alg string, report *CCResults, protocol string, port string) {
+func runExperiment(f func(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []map[string]float64), alg string, report *results.CCResults, protocol string, port string) {
 	var wg sync.WaitGroup
 	start_ping := make(chan time.Time)
 	end_ping := make(chan time.Time)
@@ -325,7 +326,7 @@ func main() {
 	tcp_algorithms := []string{"cubic"}
 	// TODO shuffle order
 
-	report := CCResults{
+	report := results.CCResults{
 		Throughput: make(map[string]([]map[float64]float64)),
 		Delay:      make(map[string]map[float64]float64),
 		FlowTimes:  make(map[string][]map[string]float64)}
@@ -361,6 +362,6 @@ func main() {
 	// print the reports
 
 	log.Info("sending report")
-	sendReport(report.encode())
+	sendReport(results.EncodeCCResults(&report))
 	log.Info("done")
 }

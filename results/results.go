@@ -1,4 +1,4 @@
-package main
+package results
 
 import (
 	"bytes"
@@ -19,11 +19,11 @@ type DBResult struct {
 	Alg        string
 	Throughput []map[float64]float64
 	Delay      map[float64]float64
-	FlowTimes  map[string][]map[string]float64
+	FlowTimes  []map[string]float64
 }
 
 /*Encodes cc result struct*/
-func (res *DBResult) encode() []byte {
+func EncodeDBResult(res *DBResult) []byte {
 	w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
 	e.Encode(res.Throughput)
@@ -32,7 +32,7 @@ func (res *DBResult) encode() []byte {
 	return w.Bytes()
 }
 
-func decodeResult(data []byte) DBResult {
+func DecodeDBResult(data []byte) DBResult {
 	results := DBResult{}
 	r := bytes.NewBuffer(data)
 	if data == nil || len(data) < 1 {
@@ -47,7 +47,7 @@ func decodeResult(data []byte) DBResult {
 }
 
 /*Encodes the inner CC results struct*/
-func (cc *CCResults) encode() []byte {
+func EncodeCCResults(cc *CCResults) []byte {
 	w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
 	e.Encode(cc.Throughput)
@@ -56,7 +56,7 @@ func (cc *CCResults) encode() []byte {
 	return w.Bytes()
 }
 
-func decodeCCResults(data []byte) CCResults {
+func DecodeCCResults(data []byte) CCResults {
 	results := CCResults{}
 	r := bytes.NewBuffer(data)
 	if data == nil || len(data) < 1 {
@@ -67,4 +67,18 @@ func decodeCCResults(data []byte) CCResults {
 	d.Decode(&results.Delay)
 	d.Decode(&results.FlowTimes)
 	return results
+}
+
+/*Turn CCResult into DBResult*/
+func BreakUpCCResult(cc *CCResults) map[string][]byte {
+	result_map := make(map[string][]byte)
+	for key, thr := range cc.Throughput {
+		db_result := &DBResult{}
+		db_result.Alg = key
+		db_result.Throughput = thr
+		db_result.Delay = cc.Delay[key]
+		db_result.FlowTimes = cc.FlowTimes[key]
+		result_map[key] = EncodeDBResult(db_result)
+	}
+	return result_map
 }
