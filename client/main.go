@@ -46,7 +46,7 @@ func measureThroughput(start time.Time, bytes_received float64, m map[float64]fl
 // NOTE: this function is basically a copy of start_remy, except I didn't want them to use the same function,
 // because the remy function requires the echo packet step, and I didn't want to add a condition to check for - if it's tcp or remy (unnecessary time)
 
-func measureTCP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []map[string]float64) {
+func measureTCP(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []map[string]float64) {
 	flow_throughputs := make([]map[float64]float64, config.NUM_CYCLES)
 	bytes_received := float64(0)
 	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
@@ -63,7 +63,7 @@ func measureTCP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]m
 		k++
 	}
 
-	conn, err := net.Dial("tcp", config.SERVER_IP+":"+config.MEASURE_SERVER_PORT)
+	conn, err := net.Dial("tcp", server_ip+":"+config.MEASURE_SERVER_PORT)
 	CheckError(err)
 	defer conn.Close()
 
@@ -106,7 +106,7 @@ func measureTCP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]m
 }
 
 /*Very similar to start tcp, except sends back a packet with the rec. timestamp*/
-func measureUDP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []map[string]float64) {
+func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []map[string]float64) {
 	flow_throughputs := make([]map[float64]float64, config.NUM_CYCLES)
 	bytes_received := float64(0)
 	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
@@ -130,7 +130,7 @@ func measureUDP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]m
 	CheckError(err)
 	defer receiver.Close()
 
-	raddr, err := net.ResolveUDPAddr("udp", config.SERVER_IP+":"+config.MEASURE_SERVER_PORT)
+	raddr, err := net.ResolveUDPAddr("udp", server_ip+":"+config.MEASURE_SERVER_PORT)
 	CheckError(err)
 	// SYN : this is the algorithm we want the server to test on us
 	receiver.WriteToUDP([]byte(alg), raddr)
@@ -138,7 +138,7 @@ func measureUDP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]m
 	// SYN-ACK : this is the port generiCC will be run on
 	n, _, err := receiver.ReadFromUDP(recvBuf)
 	gccPort := string(recvBuf[:n])
-	gccAddr, err := net.ResolveUDPAddr("udp", config.SERVER_IP+":"+gccPort)
+	gccAddr, err := net.ResolveUDPAddr("udp", server_ip+":"+gccPort)
 	CheckError(err)
 
 	// punch hole in NAT for genericCC
@@ -208,7 +208,7 @@ func measureUDP(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]m
 }
 
 /*Starts a ping chain - stops when the other goroutine sends a message over a channel*/
-func sendPings(start_ch chan time.Time, end_ch chan time.Time, protocol string, port string) map[float64]float64 {
+func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time, protocol string, port string) map[float64]float64 {
 	log.Info("entering the send ping function")
 	rtt_dict := map[float64]float64{}
 	pingBuf := make([]byte, config.PING_SIZE_BYTES)
@@ -235,7 +235,7 @@ sendloop:
 		default:
 			go func(m map[float64]float64) {
 				mutex.Lock()
-				c, err := net.Dial(protocol, config.SERVER_IP+":"+port)
+				c, err := net.Dial(protocol, server_ip+":"+port)
 				defer c.Close()
 				CheckError(err)
 				// log.Info("Waiting to write ping")
@@ -257,7 +257,7 @@ sendloop:
 	return rtt_dict
 }
 
-func runExperiment(f func(alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []map[string]float64), alg string, report *results.CCResults, protocol string, port string) {
+func runExperiment(f func(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []map[string]float64), IP string, alg string, report *results.CCResults, protocol string, port string) {
 	var wg sync.WaitGroup
 	start_ping := make(chan time.Time)
 	end_ping := make(chan time.Time)
@@ -268,13 +268,13 @@ func runExperiment(f func(alg string, start_ch chan time.Time, end_ch chan time.
 	wg.Add(1)
 	go func(wg *sync.WaitGroup) {
 		defer wg.Done()
-		throughput, flow_times = f(alg, start_ping, end_ping)
+		throughput, flow_times = f(IP, alg, start_ping, end_ping)
 	}(&wg)
 
 	wg.Add(1)
 	go func(wg *sync.WaitGroup) {
 		defer wg.Done()
-		ping_results = sendPings(start_ping, end_ping, protocol, port)
+		ping_results = sendPings(IP, start_ping, end_ping, protocol, port)
 	}(&wg)
 
 	wg.Wait()
@@ -340,15 +340,11 @@ func getIPS() []string {
 
 }
 
-/*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
-func main() {
-	// TODO bootstrap -- ask one known server for a list of other server IP
-	ip_list := getIPS()
-	log.Info(ip_list)
+func runExperimentOnMachine(IP string) {
+	// runs the experiment on the given machine, and uploads the results to the DB server
 	// addresses and algorithms to test
 	udp_algorithms := []string{"remy"}
 	tcp_algorithms := []string{"cubic"}
-	// TODO shuffle order
 
 	report := results.CCResults{
 		Throughput: make(map[string]([]map[float64]float64)),
@@ -357,7 +353,7 @@ func main() {
 
 	for _, alg := range udp_algorithms {
 		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
-		runExperiment(measureUDP, alg, &report, "udp", config.PING_UDP_SERVER_PORT)
+		runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT)
 		for ind, val := range report.Throughput[alg] {
 			log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
 			log.WithFields(log.Fields{"throughput dict": val}).Info("Dict")
@@ -369,7 +365,7 @@ func main() {
 	log.Debug("Finished UDP algorithms")
 	for _, alg := range tcp_algorithms {
 		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
-		runExperiment(measureTCP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT)
+		runExperiment(measureTCP, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT)
 		for ind, val := range report.Throughput[alg] {
 			log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
 			log.WithFields(log.Fields{"throughput dict": val}).Info("Dict")
@@ -388,4 +384,17 @@ func main() {
 	log.Info("sending report")
 	sendReport(results.EncodeCCResults(&report))
 	log.Info("done")
+
+}
+
+/*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
+func main() {
+	// bootstrap -- ask one known server for a list of other server IP
+	ip_list := getIPS()
+	log.Info(ip_list)
+
+	for _, IP := range ip_list {
+		runExperimentOnMachine(IP)
+	}
+
 }

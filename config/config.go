@@ -3,9 +3,6 @@ package config
 // conversion
 const BYTES_TO_MBITS = .000008
 
-// IP
-const SERVER_IP = "127.0.0.1"
-
 const DB_IP = "34.227.95.116"
 
 // DB
