@@ -284,10 +284,37 @@ func runExperiment(f func(alg string, start_ch chan time.Time, end_ch chan time.
 }
 
 func sendReport(report []byte) {
+	// send all bytes in 2048 byte  chunks
+	ack_buf := make([]byte, len(config.ACK))
+	end_buf := []byte(config.FIN)
 	conn, err := net.Dial("tcp", config.SERVER_IP+":"+config.DB_SERVER_PORT)
 	CheckError(err)
 	defer conn.Close()
 	conn.Write(report)
+	log.WithFields(log.Fields{"size": len(report)}).Info("Sending size bytes in chunks")
+
+	bytes_written := 0
+	for bytes_written < len(report) {
+		if bytes_written+config.TRANSFER_BUF_SIZE >= len(report) {
+			log.WithFields(log.Fields{"x": len(report) - bytes_written}).Info("Writing x more bytes")
+			conn.Write(report[bytes_written:])
+			conn.Read(ack_buf)
+			if string(ack_buf) != config.ACK {
+				log.Panic("Server did not ack back in report transfer")
+			}
+			log.Info("About to write the end into the connection")
+			conn.Write(end_buf)
+			break
+		} else {
+			conn.Write(report[bytes_written : bytes_written+config.TRANSFER_BUF_SIZE])
+			conn.Read(ack_buf)
+			if string(ack_buf) != config.ACK {
+				log.Panic("Server did not ack back in report transfer")
+			}
+			log.WithFields(log.Fields{"x": config.TRANSFER_BUF_SIZE}).Info("Writing x more bytes")
+			bytes_written += config.TRANSFER_BUF_SIZE
+		}
+	}
 }
 
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
