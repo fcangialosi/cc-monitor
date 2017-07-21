@@ -288,7 +288,7 @@ func sendReport(report []byte) {
 	// send all bytes in 2048 byte  chunks
 	ack_buf := make([]byte, len(config.ACK))
 	end_buf := []byte(config.FIN)
-	conn, err := net.Dial("tcp", config.SERVER_IP+":"+config.DB_SERVER_PORT)
+	conn, err := net.Dial("tcp", config.DB_IP+":"+config.DB_SERVER_PORT)
 	CheckError(err)
 	defer conn.Close()
 	conn.Write(report)
