@@ -11,6 +11,8 @@ const DB_IP = "34.227.95.116"
 // DB
 const DB_NAME = "cc_test_data"
 const DB_TABLE_NAME = "cc_results"
+const DB_USERNAME = "user"
+const DB_PASSWORD = "password"
 
 // HEADER
 const HEADER_SIZE = 32

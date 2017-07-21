@@ -1,4 +1,4 @@
-package db
+package main
 
 import (
 	"database/sql"
@@ -12,6 +12,7 @@ import (
 )
 
 func dbServer(ch chan results.CCResults) {
+  log.Info("In db server function")
 	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.DB_SERVER_PORT)
 	if err != nil {
 		log.Fatal(err)
@@ -57,7 +58,8 @@ func dbServer(ch chan results.CCResults) {
 func dbWorker(ch chan results.CCResults) {
 	// TODO reads jobs from channel, writes them to db
 	// sets up connection with the database
-	connection_info := "goserver:password@tcp(" + config.DB_IP + ":3306)/" + config.DB_NAME + "?charset=utf8"
+  connection_info := config.DB_USERNAME + ":" + config.DB_PASSWORD + "@tcp(localhost:3306)" + "/" + config.DB_NAME + "?charset=utf8"
+	//connection_info := "goserver:password@tcp(" + config.DB_IP + ":3306)/" + config.DB_NAME + "?charset=utf8"
 	db, err := sql.Open("mysql", connection_info)
 	defer db.Close()
 	checkError(err)
@@ -89,8 +91,11 @@ func checkError(err error) {
 
 /*This file is for solely handling the database*/
 func main() {
+	quit := make(chan struct{})
+  log.Info("main is happening")
 	db_channel := make(chan results.CCResults)
 	go dbServer(db_channel)
 	go dbWorker(db_channel)
+  <-quit
 
 }
