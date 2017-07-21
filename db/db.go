@@ -29,7 +29,7 @@ func getIPList(ip_file string) []string {
 func introServer(ip_file string) {
 
 
-	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.DB_SERVER_PORT)
+	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.IP_SERVER_PORT)
 	if err != nil {
 		log.Fatal(err)
 	}
