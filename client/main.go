@@ -318,9 +318,33 @@ func sendReport(report []byte) {
 	}
 }
 
+/*Contact the known DB server for a list of IPs to run the experiment at*/
+func getIPS() []string {
+	conn, err := net.Dial("tcp", config.DB_IP+":"+config.IP_SERVER_PORT)
+	defer conn.Close()
+	CheckError(err)
+	ack_buf := []byte("ack")
+	recv_buf := make([]byte, config.LARGE_BUF_SIZE)
+
+	conn.Write(ack_buf)
+
+	// write ack, get back list of IPs
+	n, err := conn.Read(recv_buf)
+	CheckError(err)
+	ip_list := results.DecodeIPList(recv_buf[:n])
+
+	for _, val := range ip_list {
+		log.WithFields(log.Fields{"IP": val}).Info("IP")
+	}
+	return ip_list
+
+}
+
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 	// TODO bootstrap -- ask one known server for a list of other server IP
+	ip_list := getIPS()
+	log.Info(ip_list)
 	// addresses and algorithms to test
 	udp_algorithms := []string{"remy"}
 	tcp_algorithms := []string{"cubic"}
