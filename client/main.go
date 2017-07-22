@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -340,13 +341,26 @@ func getIPS() []string {
 
 }
 
+//function to get the public ip address - found online
+func GetOutboundIP() string {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	CheckError(err)
+	defer conn.Close()
+	localAddr := conn.LocalAddr().String()
+	idx := strings.LastIndex(localAddr, ":")
+	return localAddr[0:idx]
+}
+
 func runExperimentOnMachine(IP string) {
 	// runs the experiment on the given machine, and uploads the results to the DB server
 	// addresses and algorithms to test
 	udp_algorithms := []string{"remy"}
 	tcp_algorithms := []string{"cubic"}
+	client_ip := GetOutboundIP()
 
 	report := results.CCResults{
+		ServerIP:   IP,
+		ClientIP:   client_ip,
 		Throughput: make(map[string]([]map[float64]float64)),
 		Delay:      make(map[string]map[float64]float64),
 		FlowTimes:  make(map[string][]map[string]float64)}
