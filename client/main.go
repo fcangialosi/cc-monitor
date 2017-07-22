@@ -344,8 +344,8 @@ func getIPS() []string {
 //function to get the public ip address - found online
 func GetOutboundIP() string {
 	conn, err := net.Dial("udp", "8.8.8.8:80")
-	CheckError(err)
 	defer conn.Close()
+	CheckError(err)
 	localAddr := conn.LocalAddr().String()
 	idx := strings.LastIndex(localAddr, ":")
 	return localAddr[0:idx]

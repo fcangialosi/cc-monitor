@@ -91,7 +91,9 @@ func dbServer(ch chan results.CCResults) {
 				log.WithFields(log.Fields{"n": n}).Info("bytes received")
 			}
 			// send this job to the dbWorker to upload to the database
-			ch <- results.DecodeCCResults(report_bytes)
+			report := results.DecodeCCResults(report_bytes)
+			report.ClientIP = conn.RemoteAddr().String() // client didn't put in right IP for some reason
+			ch <- report
 		}(conn)
 	}
 
