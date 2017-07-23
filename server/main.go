@@ -134,15 +134,17 @@ func handleRequestTCP(conn *net.TCPConn) {
 				case <-on_timer:
 					break sendloop
 				default:
+					log.Warn("Writing to TCP connection")
 					conn.Write(sendBuf)
 				}
 			}
-
+			log.Info("Done with on - about to go into off period")
 			off_time := time.Millisecond * time.Duration(off_dist.Sample())
 			log.WithFields(log.Fields{"off": off_time}).Info("new off for tcp")
 			<-time.After(off_time)
 		}
 	}
+	log.Info("Writing end to the TCP function")
 	conn.Write([]byte(config.FIN))
 }
 
@@ -197,8 +199,10 @@ func handleRequestUDP(alg string, server *net.UDPConn, raddr *net.UDPAddr) {
 		cmd := exec.Command(config.PATH_TO_GENERIC_CC, args...)
 		cmd.Stdout = os.Stdout
 		if err := cmd.Run(); err != nil {
+			log.Info("std out error from running generic CC ermagerd")
 			log.Error(err)
 		}
+		log.Info("Done with genericCC program")
 		// server.WriteToUDP([]byte(config.FIN), raddr)
 	default:
 		log.WithFields(log.Fields{"alg": alg}).Error("udp algorithm not implemented")
