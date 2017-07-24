@@ -65,7 +65,7 @@ func pingServerUDP() {
 			log.Fatal(err)
 		}
 		go func(s *net.UDPConn, addr *net.UDPAddr, buf []byte) {
-			log.WithFields(log.Fields{"IP": addr.IP, "Port": addr.Port}).Info("Writing back ping channel")
+			//log.WithFields(log.Fields{"IP": addr.IP, "Port": addr.Port}).Info("Writing back ping channel")
 			s.WriteToUDP(buf, addr)
 		}(server, raddr, p)
 	}
