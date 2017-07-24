@@ -76,10 +76,16 @@ func measureTCP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 
 	for {
 		n, err := conn.Read(recvBuf)
+		if err == io.EOF {
+			log.Info("Received EOF from tcp connection end")
+			log.Error(err)
+			break // break out of function
+		}
 		if err != nil {
 			log.Error(err)
 		}
 		if n <= 0 || n >= 3 && string(recvBuf[:n]) == config.FIN {
+			log.Info("Got signal to end TCP sending")
 			end_flow_times[current_flow+1] = last_received_time // last last recieved time
 			break
 		}
@@ -97,6 +103,7 @@ func measureTCP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 		last_received_time = elapsed(original_start)
 		next_measurement = measureThroughput(start, bytes_received, flow_throughputs[current_flow], next_measurement)
 	}
+	log.Info("Trying to send pings to end tcp measuring")
 	end_ch <- time.Time{} // can stop sending pings
 	i := 0
 	for i < config.NUM_CYCLES {
@@ -115,7 +122,8 @@ func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 	next_measurement := float64(config.INITIAL_X_VAL)
 	flow_times := make([]map[string]float64, config.NUM_CYCLES)
 	end_flow_times := make([]float64, config.NUM_CYCLES+1)
-	current_flow := -1
+	current_flow := 0
+	started_flow := false
 	k := 0
 	for k < config.NUM_CYCLES {
 		flow_throughputs[k] = map[float64]float64{}
@@ -176,7 +184,12 @@ func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 			break
 		}
 		if string(recvBuf[:config.START_FLOW_LEN]) == config.START_FLOW {
-			current_flow++
+			log.Info("Received start flow, incrementing current flow")
+			if started_flow {
+				current_flow++
+			} else {
+				started_flow = true
+			}
 			flow_times[current_flow][config.START] = elapsed(original_start)
 			end_flow_times[current_flow] = last_received_time
 			log.WithFields(log.Fields{"last received": last_received_time, "current": elapsed(original_start)}).Info("Received START FLOW GOTTA START A NEW ONE")
