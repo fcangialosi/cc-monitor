@@ -3,7 +3,7 @@ package config
 // conversion
 const BYTES_TO_MBITS = .000008
 
-const DB_IP = "54.90.192.40"
+const DB_IP = "54.144.33.5"
 
 // DB
 const DB_NAME = "cc_test_data"
@@ -52,3 +52,6 @@ const END = "END"
 const REMY = "remy"
 const CUBIC = "cubic"
 const BBR = "bbr"
+
+// timeout for reading
+const CLIENT_TIMEOUT = 30 // 40 seconds before the client times out
