@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"math/rand"
 	"net"
 	"os"
@@ -92,6 +93,7 @@ func openUDPServer() {
 
 func pingServerTCP() {
 	p := make([]byte, config.PING_SIZE_BYTES)
+	recv := make([]byte, config.PING_SIZE_BYTES)
 	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.PING_TCP_SERVER_PORT)
 	if err != nil {
 		log.Fatal(err)
@@ -109,7 +111,14 @@ func pingServerTCP() {
 		}
 		go func(c *net.TCPConn, buf []byte) {
 			defer conn.Close()
-			conn.Write(p)
+			// loop of reading and writing until eof
+			for {
+				conn.Write(p)
+				_, err := conn.Read(recv)
+				if err == io.EOF {
+					return // client disconnected
+				}
+			}
 		}(conn, p)
 	}
 }
