@@ -24,12 +24,15 @@ const MEASURE_SERVER_PORT = "10102"
 const DB_SERVER_PORT = "10103"
 const IP_SERVER_PORT = "10104"
 const MAX_PORT = 65535
+const OPEN_UDP_PORT = "10105"
+const CLIENT_UDP_PORT = "9876"
 
 // Ping server constants
 const PING_SIZE_BYTES = 1492
 
 // Measure server constants
 const LARGE_BUF_SIZE = 4096
+const TCP_TRANSFER_SIZE = 20000
 const MAX_REQ_SIZE = 128
 const TCP_CONGESTION = 0xd
 const MEAN_ON_TIME_MS = 10000

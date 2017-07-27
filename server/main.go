@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var sendBuf []byte = make([]byte, config.TRANSFER_BUF_SIZE)
+var sendBuf []byte = make([]byte, config.TCP_TRANSFER_SIZE)
 var rng *rand.Rand
 
 /*****************************************************************************/
@@ -22,6 +23,73 @@ var rng *rand.Rand
 func init() {
 	rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 }
+
+func checkErrMsg(err error, message string) {
+	if err != nil {
+		log.WithFields(log.Fields{"msg": message}).Fatal(err)
+	}
+}
+
+/*Handles the "open genericCC protocol" -> over TCP*/
+func openUDPServer() {
+	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.OPEN_UDP_PORT)
+	checkErrMsg(err, "open TCP port for starting genericCC")
+
+	server, err := net.ListenTCP("tcp", laddr)
+	checkErrMsg(err, "listen TCP func open genericCC function")
+
+	for {
+		conn, err := server.AcceptTCP()
+		if err != nil {
+			log.Warning(err)
+			continue
+		}
+
+		go func(c *net.TCPConn) {
+			defer conn.Close()
+			reqbuf := make([]byte, config.MAX_REQ_SIZE)
+			n, err := conn.Read(reqbuf)
+			if n <= 0 {
+				log.Error("Read 0 bytes from the client")
+				return
+			}
+			if err != nil {
+				log.Warn(err)
+			}
+
+			alg := string(reqbuf[:n])
+
+			// for right now -> alg must be remy
+			if alg != config.REMY {
+				log.WithFields(log.Fields{"protocol": string(reqbuf[:n])}).Info("Read non-remy alg from client on open UDP port")
+			}
+
+			// pick a port for genericCC to run
+			srcport := strconv.Itoa(rng.Intn(config.MAX_PORT-1025) + 1025)
+			// SYN-ACK
+			conn.Write([]byte(srcport)) // TCP handles reliability
+
+			// wait for ACK from client
+			n, err = conn.Read(reqbuf)
+			if err != nil {
+				log.Warn(err)
+			}
+			if string(reqbuf[:n]) != config.ACK {
+				log.Warn("Did not receive ack after sending client src port")
+				return
+			} else {
+				log.Info("Read ack")
+			}
+			clientIPPort := conn.RemoteAddr().String()
+			clientIP := strings.Split(clientIPPort, ":")[0] // of form IP:port
+			log.WithFields(log.Fields{"client ip": clientIP}).Info("client IP")
+			runGCC(srcport, clientIP, alg)
+			// can close TCP connection
+		}(conn)
+
+	}
+}
+
 func pingServerTCP() {
 	p := make([]byte, config.PING_SIZE_BYTES)
 	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.PING_TCP_SERVER_PORT)
@@ -148,41 +216,18 @@ func handleRequestTCP(conn *net.TCPConn) {
 	conn.Write([]byte(config.FIN))
 }
 
-func measureServerUDP() {
-	laddr, err := net.ResolveUDPAddr("udp", ":"+config.MEASURE_SERVER_PORT)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	server, err := net.ListenUDP("udp", laddr)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	reqBuf := make([]byte, config.MAX_REQ_SIZE)
-	for {
-		n, raddr, err := server.ReadFromUDP(reqBuf)
-		if err != nil {
-			log.Fatal(err)
-		}
-		go handleRequestUDP(string(reqBuf[:n]), server, raddr)
-	}
-}
-
-func handleRequestUDP(alg string, server *net.UDPConn, raddr *net.UDPAddr) {
-	os.Setenv("MIN_RTT", "150")
-	ip := raddr.IP.String()
-	port := strconv.Itoa(raddr.Port)
+func runGCC(srcport string, ip string, alg string) {
+	log.Info("About to sleep")
+	time.Sleep(time.Second * 5)
+	log.Info("Done sleeping")
+	port := config.CLIENT_UDP_PORT
 	on_time := strconv.Itoa(config.MEAN_ON_TIME_MS)
 	off_time := strconv.Itoa(config.MEAN_OFF_TIME_MS)
 	num_cycles := strconv.Itoa(config.NUM_CYCLES)
 
-	srcport := strconv.Itoa(rng.Intn(config.MAX_PORT-1025) + 1025)
-	// SYN-ACK
-	server.WriteToUDP([]byte(srcport), raddr)
-
 	// Now we can start genericCC
 	// set MIN_RTT env variable
+	os.Setenv("MIN_RTT", "150")
 	switch alg {
 	case "remy":
 		args := []string{
@@ -213,10 +258,10 @@ func handleRequestUDP(alg string, server *net.UDPConn, raddr *net.UDPAddr) {
 func main() {
 	quit := make(chan struct{})
 
-	go pingServerUDP()
-	go pingServerTCP()
-	go measureServerTCP()
-	go measureServerUDP()
+	go pingServerUDP()    // UDP pings
+	go pingServerTCP()    // TCP pings
+	go measureServerTCP() // Measure TCP throughput
+	go openUDPServer()    // open port to measure UDP throughput
 
 	<-quit
 }
