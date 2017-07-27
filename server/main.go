@@ -217,9 +217,6 @@ func handleRequestTCP(conn *net.TCPConn) {
 }
 
 func runGCC(srcport string, ip string, alg string) {
-	log.Info("About to sleep")
-	time.Sleep(time.Second * 5)
-	log.Info("Done sleeping")
 	port := config.CLIENT_UDP_PORT
 	on_time := strconv.Itoa(config.MEAN_ON_TIME_MS)
 	off_time := strconv.Itoa(config.MEAN_OFF_TIME_MS)
