@@ -246,46 +246,72 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 	rtt_dict := map[float64]float64{}
 	pingBuf := make([]byte, config.PING_SIZE_BYTES)
 	recvBuf := make([]byte, config.PING_SIZE_BYTES)
+	if protocol == config.UDP {
 
-	// create tcp connection to the server
-	// TODO this should probably use tcp/udp depending on which algorithm is running
-	// TODO but need to support this on the server as well, for now just udp
-	// conn, err := net.Dial("udp", config.SERVER_IP+":"+config.PING_SERVER_PORT)
-	// CheckError(err)
-	// defer conn.Close()
-	var mutex = &sync.Mutex{}
+		// create tcp connection to the server
+		// TODO this should probably use tcp/udp depending on which algorithm is running
+		// TODO but need to support this on the server as well, for now just udp
+		// conn, err := net.Dial("udp", config.SERVER_IP+":"+config.PING_SERVER_PORT)
+		// CheckError(err)
+		// defer conn.Close()
+		var mutex = &sync.Mutex{}
 
-	// wait for measurement to start
-	log.Info("waiting to receive go in ping function")
-	start := <-start_ch
-	log.Info("Got start to send pings")
-sendloop:
-	for {
-		select {
-		case <-end_ch:
-			log.Debug("Got signal to end pings")
-			break sendloop
-		default:
-			go func(m map[float64]float64) {
-				mutex.Lock()
-				c, err := net.Dial(protocol, server_ip+":"+port)
-				defer c.Close()
-				CheckError(err)
-				// log.Info("Waiting to write ping")
-				c.Write(pingBuf)
-				send_timestamp := elapsed(start)
-				// log.Info("Waiting to read from ping buf")
-				_, err = c.Read(recvBuf)
-				recv_timestamp := elapsed(start)
-				CheckError(err)
-				rtt := (recv_timestamp - send_timestamp)
-				// mutex.Lock()
-				m[send_timestamp] = rtt
-				mutex.Unlock()
-				//log.WithFields(log.Fields{"protocol": protocol, "rtt": rtt, "sent": send_timestamp}).Warn("Ping Info")
-			}(rtt_dict)
+		// wait for measurement to start
+		log.Info("waiting to receive go in ping function")
+		start := <-start_ch
+		log.Info("Got start to send pings")
+	sendloop:
+		for {
+			select {
+			case <-end_ch:
+				log.Debug("Got signal to end pings")
+				break sendloop
+			default:
+				go func(m map[float64]float64) {
+					mutex.Lock()
+					c, err := net.Dial(protocol, server_ip+":"+port)
+					defer c.Close()
+					CheckError(err)
+					// log.Info("Waiting to write ping")
+					c.Write(pingBuf)
+					send_timestamp := elapsed(start)
+					// log.Info("Waiting to read from ping buf")
+					_, err = c.Read(recvBuf)
+					recv_timestamp := elapsed(start)
+					CheckError(err)
+					rtt := (recv_timestamp - send_timestamp)
+					// mutex.Lock()
+					m[send_timestamp] = rtt
+					mutex.Unlock()
+					//log.WithFields(log.Fields{"protocol": protocol, "rtt": rtt, "sent": send_timestamp}).Warn("Ping Info")
+				}(rtt_dict)
+			}
+			time.Sleep(time.Millisecond * 3000)
 		}
-		time.Sleep(time.Millisecond * 3000)
+	} else { // tcp connection
+		conn, err := net.Dial("tcp", server_ip+":"+port)
+		CheckError(err)
+		defer conn.Close()
+
+		start := <-start_ch // wait for start
+
+	sendloop_tcp:
+		for {
+			select {
+			case <-end_ch:
+				log.Debug("Got signal to end pings")
+				break sendloop_tcp
+			default:
+				conn.Write(pingBuf)
+				send_timestamp := elapsed(start)
+				_, err = conn.Read(recvBuf)
+				CheckErrMsg(err, "read on tcp pings")
+				recv_timestamp := elapsed(start)
+				rtt := (recv_timestamp - send_timestamp)
+				rtt_dict[send_timestamp] = rtt
+			}
+			time.Sleep(time.Millisecond * 3000)
+		}
 	}
 	return rtt_dict
 }
@@ -414,6 +440,9 @@ func runExperimentOnMachine(IP string) {
 			for ind, val := range report.FlowTimes[alg] {
 				log.WithFields(log.Fields{"flow number": ind, "flow start": val[config.START], "flow end": val[config.END]}).Info("Flow times")
 			}
+			for key, val := range report.Delay[alg] {
+				log.WithFields(log.Fields{"time sent": key, "rtt": val, "alg": alg}).Info("Ping Times")
+			}
 		} else {
 			log.WithFields(log.Fields{"IP": IP}).Warn("UDP sending timed out")
 		}
@@ -429,6 +458,9 @@ func runExperimentOnMachine(IP string) {
 		}
 		for ind, val := range report.FlowTimes[alg] {
 			log.WithFields(log.Fields{"flow number": ind, "flow start": val[config.START], "flow end": val[config.END]}).Info("Flow times")
+		}
+		for key, val := range report.Delay[alg] {
+			log.WithFields(log.Fields{"time sent": key, "rtt": val, "alg": alg}).Info("Ping Times")
 		}
 	}
 
