@@ -134,51 +134,55 @@ func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 		k++
 	}
 
-	// create connection
-	log.Info("Creating listening port")
-	laddr, err := net.ResolveUDPAddr("udp", ":9876")
+	// create TCP connection to get the gcc port
+	conn, err := net.Dial("tcp", server_ip+":"+config.OPEN_UDP_PORT)
+	CheckErrMsg(err, "Open TCP connection to get genericCC port number")
+	defer conn.Close()
+	conn.Write([]byte(alg)) // write remy
+
+	n, err := conn.Read(recvBuf)
+	CheckErrMsg(err, "Trying to receive port number from genericCC")
+	gccPort := string(recvBuf[:n])
+	log.WithFields(log.Fields{"port": gccPort}).Info("Received port number genericCC will be running on")
+
+	// create UDP listening port
+	laddr, err := net.ResolveUDPAddr("udp", ":"+config.CLIENT_UDP_PORT) // listen at a known port for later udp messages
 	CheckErrMsg(err, "creating laddr")
-	log.Info("create laddr, adding receiver")
 	receiver, err := net.ListenUDP("udp", laddr)
 	CheckErrMsg(err, "error on creating receiver for listen UDP")
 	defer receiver.Close()
 
-	raddr, err := net.ResolveUDPAddr("udp", server_ip+":"+config.MEASURE_SERVER_PORT)
-	CheckErrMsg(err, "Error on connecting to UDP on server")
-	// SYN : this is the algorithm we want the server to test on us
-	receiver.WriteToUDP([]byte(alg), raddr)
-
-	// SYN-ACK : this is the port generiCC will be run on
-	n, _, err := receiver.ReadFromUDP(recvBuf)
-	gccPort := string(recvBuf[:n])
+	// start listening on genericCC
 	gccAddr, err := net.ResolveUDPAddr("udp", server_ip+":"+gccPort)
 	CheckErrMsg(err, "resolving addr to generic CC port given")
 
-	// punch hole in NAT for genericCC
-	receiver.WriteToUDP([]byte("open seasame"), gccAddr)
-	// ACK : also tell server its now allowed to start genericCC
-	// receiver.WriteToUDP([]byte(config.ACK), raddr)
+	// write ACK to the server so server can start genericCC
+	conn.Write([]byte(config.ACK))
 
-	// loop to read bytes and send back to the server
+	// punch hole in NAT for genericCC
+	_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
+	if err != nil {
+		log.Panic(err)
+	}
+	log.Info("Wrote open sesame")
+
+	// loop to read bytes and send back to the server - with genericCC
 	start := time.Now()
 	original_start := start
 	last_received_time := elapsed(start)
 	start_ping := true
 	for {
-		// log.Warn("Reading from recv buf in measure UDP")
 		// set the read deadline to be well above the off time
 		receiver.SetReadDeadline(time.Now().Add(config.CLIENT_TIMEOUT * time.Second))
-		log.Info("About to read from recvbuf")
 		n, raddr, err := receiver.ReadFromUDP(recvBuf)
-		log.Info("Got shit from recv buf")
-		// don't start the timer until we've receied the first byte
+
 		// TODO maybe add one RTT here
 		if start_ping {
-			log.Info("start ping is true")
 			start = time.Now()
 			start_ch <- start
 			start_ping = false
 		}
+
 		if err != nil {
 			if err == io.EOF {
 				break
