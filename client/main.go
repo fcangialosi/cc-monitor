@@ -31,7 +31,7 @@ func elapsed(start time.Time) float64 {
 
 /*Used by both Remy and TCP*/
 func singleThroughputMeasurement(t float64, bytes_received float64) float64 {
-	log.WithFields(log.Fields{"t": t, "bytes received": bytes_received}).Warn("Time being passed into single throughout measurement function")
+	//log.WithFields(log.Fields{"t": t, "bytes received": bytes_received}).Warn("Time being passed into single throughout measurement function")
 	return (bytes_received * config.BYTES_TO_MBITS) / (t / 1000) // returns in Mbps
 }
 
@@ -165,15 +165,15 @@ func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 	gccAddr, err := net.ResolveUDPAddr("udp", server_ip+":"+gccPort)
 	CheckErrMsg(err, "resolving addr to generic CC port given")
 
-	// write ACK to the server so server can start genericCC
-	conn.Write([]byte(config.ACK))
-
 	// punch hole in NAT for genericCC
 	_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
 	if err != nil {
 		log.Panic(err)
 	}
 	log.Info("Wrote open sesame")
+
+	// write ACK to the server so server can start genericCC
+	conn.Write([]byte(config.ACK))
 
 	// loop to read bytes and send back to the server - with genericCC
 	start := time.Now()
@@ -183,8 +183,9 @@ func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 	for {
 		// set the read deadline to be well above the off time
 		receiver.SetReadDeadline(time.Now().Add(config.CLIENT_TIMEOUT * time.Second))
-		n, raddr, err := receiver.ReadFromUDP(recvBuf)
 
+		n, raddr, err := receiver.ReadFromUDP(recvBuf)
+		log.Info("read from udp")
 		// TODO maybe add one RTT here
 		if start_ping {
 			start = time.Now()
@@ -208,7 +209,8 @@ func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 			end_flow_times[current_flow+1] = last_received_time // last end flow time
 			break
 		}
-		if string(recvBuf[:config.START_FLOW_LEN]) == config.START_FLOW {
+		if ReadHeaderVal(recvBuf, config.SEQNUM_START, config.SEQNUM_END, binary.LittleEndian) == -1 {
+			//if string(recvBuf[:config.START_FLOW_LEN]) == config.START_FLOW {
 			log.Info("Received start flow, incrementing current flow")
 			if started_flow {
 				current_flow++
@@ -223,6 +225,9 @@ func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 			bytes_received = 0
 			next_measurement = 1000 // reset to 1KB
 			start = time.Now()
+			// echo packet
+			receiver.WriteToUDP(recvBuf[:n], raddr)
+			continue
 		}
 
 		// measure throughput

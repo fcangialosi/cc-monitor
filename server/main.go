@@ -214,7 +214,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 				case <-on_timer:
 					break sendloop
 				default:
-					log.Warn("Writing to TCP connection")
+					//log.Warn("Writing to TCP connection")
 					conn.Write(sendBuf)
 				}
 			}
