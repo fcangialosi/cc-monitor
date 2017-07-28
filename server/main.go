@@ -92,8 +92,7 @@ func openUDPServer() {
 }
 
 func pingServerTCP() {
-	p := make([]byte, config.PING_SIZE_BYTES)
-	recv := make([]byte, config.PING_SIZE_BYTES)
+	p := []byte("ACK")
 	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.PING_TCP_SERVER_PORT)
 	if err != nil {
 		log.Fatal(err)
@@ -110,14 +109,16 @@ func pingServerTCP() {
 			log.Warning(err)
 		}
 		go func(c *net.TCPConn, buf []byte) {
-			defer conn.Close()
+			defer c.Close()
 			// loop of reading and writing until eof
+			recv := make([]byte, config.PING_SIZE_BYTES)
 			for {
-				conn.Write(p)
-				_, err := conn.Read(recv)
+				_, err := c.Read(recv)
 				if err == io.EOF {
 					return // client disconnected
 				}
+				log.Info("Sending ping back")
+				c.Write(p)
 			}
 		}(conn, p)
 	}
@@ -205,6 +206,8 @@ func handleRequestTCP(conn *net.TCPConn) {
 			// on - send start flow message
 			log.WithFields(log.Fields{"on": on_time}).Info("new on for tcp")
 			conn.Write(startBuf)
+			reqbuf := make([]byte, config.ACK_LEN)
+			conn.Read(reqbuf)
 		sendloop:
 			for {
 				select {

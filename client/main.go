@@ -1,16 +1,17 @@
 package main
 
 import (
+	"../config"
+	"../results"
 	"encoding/binary"
+	"fmt"
+	log "github.com/sirupsen/logrus"
 	"io"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"time"
-
-	"../config"
-	"../results"
-	log "github.com/sirupsen/logrus"
 )
 
 /*Simple function to print errors or ignore them*/
@@ -22,22 +23,27 @@ func CheckError(err error) {
 
 /*Gives elapsed time in milliseconds since a given start time*/
 func elapsed(start time.Time) float64 {
-	return float64(time.Since(start).Seconds() * 1000)
+	now := time.Now()
+	dif := now.Sub(start).Seconds() * 1000
+	//log.WithFields(log.Fields{"start": start, "now": now, "dif": dif}).Info("elapsed function")
+	return float64(dif)
 }
 
 /*Used by both Remy and TCP*/
 func singleThroughputMeasurement(t float64, bytes_received float64) float64 {
+	log.WithFields(log.Fields{"t": t, "bytes received": bytes_received}).Warn("Time being passed into single throughout measurement function")
 	return (bytes_received * config.BYTES_TO_MBITS) / (t / 1000) // returns in Mbps
 }
 
 /*Measure throughput at increments*/
 func measureThroughput(start time.Time, bytes_received float64, m map[float64]float64, next_measurement float64) float64 {
 	time := elapsed(start)
+	entire_throughput := singleThroughputMeasurement(time, bytes_received)
 	// log.WithFields(log.Fields{"mbps": singleThroughputMeasurement(time, bytes_received)}).Info()
 	received := next_measurement
 	for received <= bytes_received {
 		// add an entry into the map
-		m[received] = singleThroughputMeasurement(time, received)
+		m[received] = entire_throughput
 		received *= 2
 	}
 	return received // return the last received throughput
@@ -50,7 +56,7 @@ func measureThroughput(start time.Time, bytes_received float64, m map[float64]fl
 func measureTCP(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []map[string]float64, bool) {
 	flow_throughputs := make([]map[float64]float64, config.NUM_CYCLES)
 	bytes_received := float64(0)
-	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
+	recvBuf := make([]byte, config.TCP_TRANSFER_SIZE)
 	next_measurement := float64(1000)
 	flow_times := make([]map[string]float64, config.NUM_CYCLES)
 	current_flow := -1
@@ -64,11 +70,11 @@ func measureTCP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 		k++
 	}
 
+	start := time.Now()
 	conn, err := net.Dial("tcp", server_ip+":"+config.MEASURE_SERVER_PORT)
 	CheckError(err)
 	defer conn.Close()
 
-	start := time.Now()
 	original_start := start
 	last_received_time := elapsed(start)
 	conn.Write([]byte(alg))
@@ -96,12 +102,15 @@ func measureTCP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 			bytes_received = 0
 			start = time.Now()
 			next_measurement = 1000 // reset to 1KB
+			log.Info("AT END OF TCP START FLOW LOOP")
+			conn.Write([]byte(config.ACK))
+			continue // do not count this start flow message as the first measurement
 		}
-
 		// measure throughput
 		bytes_received += float64(n)
 		last_received_time = elapsed(original_start)
 		next_measurement = measureThroughput(start, bytes_received, flow_throughputs[current_flow], next_measurement)
+
 	}
 	log.Info("Trying to send pings to end tcp measuring")
 	end_ch <- time.Time{} // can stop sending pings
@@ -245,7 +254,6 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 	log.Info("entering the send ping function")
 	rtt_dict := map[float64]float64{}
 	pingBuf := make([]byte, config.PING_SIZE_BYTES)
-	recvBuf := make([]byte, config.PING_SIZE_BYTES)
 	if protocol == config.UDP {
 
 		// create tcp connection to the server
@@ -269,12 +277,13 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 			default:
 				go func(m map[float64]float64) {
 					mutex.Lock()
+					recvBuf := make([]byte, config.PING_SIZE_BYTES)
 					c, err := net.Dial(protocol, server_ip+":"+port)
 					defer c.Close()
 					CheckError(err)
 					// log.Info("Waiting to write ping")
-					c.Write(pingBuf)
 					send_timestamp := elapsed(start)
+					c.Write(pingBuf)
 					// log.Info("Waiting to read from ping buf")
 					_, err = c.Read(recvBuf)
 					recv_timestamp := elapsed(start)
@@ -294,6 +303,7 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 		defer conn.Close()
 
 		start := <-start_ch // wait for start
+		log.WithFields(log.Fields{"original start": start}).Info("TCP ping times")
 
 	sendloop_tcp:
 		for {
@@ -302,12 +312,16 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 				log.Debug("Got signal to end pings")
 				break sendloop_tcp
 			default:
-				conn.Write(pingBuf)
+				recvBuf := make([]byte, config.PING_SIZE_BYTES)
 				send_timestamp := elapsed(start)
-				_, err = conn.Read(recvBuf)
+				log.WithFields(log.Fields{"send time": send_timestamp}).Info("TCP-ping send time")
+				conn.Write(pingBuf)
+				n, err := conn.Read(recvBuf)
 				CheckErrMsg(err, "read on tcp pings")
 				recv_timestamp := elapsed(start)
 				rtt := (recv_timestamp - send_timestamp)
+				log.WithFields(log.Fields{"recv time": recv_timestamp, "rtt": rtt, "bytes": n, "buf": recvBuf[:n]}).Info("TCP ping times")
+				fmt.Println("Time is %v\n", rtt)
 				rtt_dict[send_timestamp] = rtt
 			}
 			time.Sleep(time.Millisecond * 3000)
@@ -419,7 +433,8 @@ func runExperimentOnMachine(IP string) {
 	// runs the experiment on the given machine, and uploads the results to the DB server
 	// addresses and algorithms to test
 	udp_algorithms := []string{"remy"}
-	tcp_algorithms := []string{"cubic", "bbr"}
+	//tcp_algorithms := []string{"cubic", "bbr"}
+	tcp_algorithms := []string{"cubic"}
 	client_ip := GetOutboundIP()
 
 	report := results.CCResults{
@@ -485,7 +500,9 @@ func CheckErrMsg(err error, message string) {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 	// bootstrap -- ask one known server for a list of other server IP
-	ip_list := getIPS()
+	//ip_list := getIPS()
+	mahimahi := os.Getenv("MAHIMAHI_BASE")
+	ip_list := []string{mahimahi}
 	log.Info(ip_list)
 
 	for _, IP := range ip_list {
