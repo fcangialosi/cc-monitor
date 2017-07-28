@@ -36,17 +36,18 @@ func singleThroughputMeasurement(t float64, bytes_received float64) float64 {
 }
 
 /*Measure throughput at increments*/
-func measureThroughput(start time.Time, bytes_received float64, m map[float64]float64, next_measurement float64) float64 {
+func measureThroughput(start time.Time, bytes_received float64, m map[float64]float64) {
 	time := elapsed(start)
 	entire_throughput := singleThroughputMeasurement(time, bytes_received)
-	// log.WithFields(log.Fields{"mbps": singleThroughputMeasurement(time, bytes_received)}).Info()
+	m[bytes_received] = entire_throughput
+	/*// log.WithFields(log.Fields{"mbps": singleThroughputMeasurement(time, bytes_received)}).Info()
 	received := next_measurement
 	for received <= bytes_received {
 		// add an entry into the map
 		m[received] = entire_throughput
 		received *= 2
-	}
-	return received // return the last received throughput
+	}*/
+	//return received // return the last received throughput
 }
 
 /*Sends start tcp message to server and records tcp throughput*/
@@ -57,7 +58,7 @@ func measureTCP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 	flow_throughputs := make([]map[float64]float64, config.NUM_CYCLES)
 	bytes_received := float64(0)
 	recvBuf := make([]byte, config.TCP_TRANSFER_SIZE)
-	next_measurement := float64(1000)
+	//next_measurement := float64(1000)
 	flow_times := make([]map[string]float64, config.NUM_CYCLES)
 	current_flow := -1
 	end_flow_times := make([]float64, config.NUM_CYCLES+1)
@@ -101,7 +102,7 @@ func measureTCP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 			end_flow_times[current_flow] = last_received_time
 			bytes_received = 0
 			start = time.Now()
-			next_measurement = 1000 // reset to 1KB
+			//next_measurement = 1000 // reset to 1KB
 			log.Info("AT END OF TCP START FLOW LOOP")
 			conn.Write([]byte(config.ACK))
 			continue // do not count this start flow message as the first measurement
@@ -109,7 +110,7 @@ func measureTCP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 		// measure throughput
 		bytes_received += float64(n)
 		last_received_time = elapsed(original_start)
-		next_measurement = measureThroughput(start, bytes_received, flow_throughputs[current_flow], next_measurement)
+		measureThroughput(start, bytes_received, flow_throughputs[current_flow])
 
 	}
 	log.Info("Trying to send pings to end tcp measuring")
@@ -128,7 +129,7 @@ func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 	bytes_received := float64(0)
 	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
 	shouldEcho := (alg == "remy")
-	next_measurement := float64(config.INITIAL_X_VAL)
+	//next_measurement := float64(config.INITIAL_X_VAL)
 	flow_times := make([]map[string]float64, config.NUM_CYCLES)
 	end_flow_times := make([]float64, config.NUM_CYCLES+1)
 	current_flow := 0
@@ -223,7 +224,7 @@ func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 			end_flow_times[current_flow] = last_received_time
 			log.WithFields(log.Fields{"last received": last_received_time, "current": elapsed(original_start)}).Info("Received START FLOW GOTTA START A NEW ONE")
 			bytes_received = 0
-			next_measurement = 1000 // reset to 1KB
+			//next_measurement = 1000 // reset to 1KB
 			start = time.Now()
 			// echo packet
 			receiver.WriteToUDP(recvBuf[:n], raddr)
@@ -233,7 +234,7 @@ func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 		// measure throughput
 		bytes_received += float64(n)
 		last_received_time = elapsed(original_start)
-		next_measurement = measureThroughput(start, bytes_received, flow_throughputs[current_flow], next_measurement)
+		measureThroughput(start, bytes_received, flow_throughputs[current_flow])
 
 		// echo packet with receive timestamp
 		if shouldEcho {
