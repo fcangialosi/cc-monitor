@@ -113,12 +113,12 @@ func pingServerTCP() {
 			// loop of reading and writing until eof
 			recv := make([]byte, config.PING_SIZE_BYTES)
 			for {
-				_, err := c.Read(recv)
+				n, err := c.Read(recv)
 				if err == io.EOF {
 					return // client disconnected
 				}
-				log.Info("Sending ping back")
-				c.Write(p)
+				log.WithFields(log.Fields{"i": string(recv[:n])}).Info("got ping")
+				c.Write(recv[:n])
 			}
 		}(conn, p)
 	}

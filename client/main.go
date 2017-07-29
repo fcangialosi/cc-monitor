@@ -1,17 +1,17 @@
 package main
 
 import (
-	"../config"
-	"../results"
 	"encoding/binary"
-	"fmt"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"net"
-	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"../config"
+	"../results"
+	log "github.com/sirupsen/logrus"
 )
 
 /*Simple function to print errors or ignore them*/
@@ -311,6 +311,7 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 		start := <-start_ch // wait for start
 		log.WithFields(log.Fields{"original start": start}).Info("TCP ping times")
 
+		i := 0
 	sendloop_tcp:
 		for {
 			select {
@@ -320,17 +321,17 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 			default:
 				recvBuf := make([]byte, config.PING_SIZE_BYTES)
 				send_timestamp := elapsed(start)
-				log.WithFields(log.Fields{"send time": send_timestamp}).Info("TCP-ping send time")
-				conn.Write(pingBuf)
+				log.WithFields(log.Fields{"send time": send_timestamp, "i": i}).Info("TCP-ping send time")
+				conn.Write([]byte(strconv.Itoa(i)))
 				n, err := conn.Read(recvBuf)
 				CheckErrMsg(err, "read on tcp pings")
 				recv_timestamp := elapsed(start)
 				rtt := (recv_timestamp - send_timestamp)
-				log.WithFields(log.Fields{"recv time": recv_timestamp, "rtt": rtt, "bytes": n, "buf": recvBuf[:n]}).Info("TCP ping times")
-				fmt.Println("Time is %v\n", rtt)
+				log.WithFields(log.Fields{"recv time": recv_timestamp, "rtt": rtt, "bytes": n, "buf": string(recvBuf[:n])}).Info("TCP ping times")
 				rtt_dict[send_timestamp] = rtt
 			}
-			time.Sleep(time.Millisecond * 3000)
+			time.Sleep(time.Millisecond * 2000)
+			i += 1
 		}
 	}
 	return rtt_dict
@@ -438,7 +439,7 @@ func GetOutboundIP() string {
 func runExperimentOnMachine(IP string) {
 	// runs the experiment on the given machine, and uploads the results to the DB server
 	// addresses and algorithms to test
-	udp_algorithms := []string{"remy"}
+	// udp_algorithms := []string{"remy"}
 	//tcp_algorithms := []string{"cubic", "bbr"}
 	tcp_algorithms := []string{"cubic"}
 	client_ip := GetOutboundIP()
@@ -450,26 +451,28 @@ func runExperimentOnMachine(IP string) {
 		Delay:      make(map[string]map[float64]float64),
 		FlowTimes:  make(map[string][]map[string]float64)}
 
-	for _, alg := range udp_algorithms {
-		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
-		timed_out := runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT)
-		if !timed_out {
-			for ind, val := range report.Throughput[alg] {
-				log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
-				log.WithFields(log.Fields{"throughput dict": val}).Info("Dict")
+	/*
+		for _, alg := range udp_algorithms {
+			log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
+			timed_out := runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT)
+			if !timed_out {
+				for ind, val := range report.Throughput[alg] {
+					log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
+					log.WithFields(log.Fields{"throughput dict": val}).Info("Dict")
+				}
+				for ind, val := range report.FlowTimes[alg] {
+					log.WithFields(log.Fields{"flow number": ind, "flow start": val[config.START], "flow end": val[config.END]}).Info("Flow times")
+				}
+				for key, val := range report.Delay[alg] {
+					log.WithFields(log.Fields{"time sent": key, "rtt": val, "alg": alg}).Info("Ping Times")
+				}
+			} else {
+				log.WithFields(log.Fields{"IP": IP}).Warn("UDP sending timed out")
 			}
-			for ind, val := range report.FlowTimes[alg] {
-				log.WithFields(log.Fields{"flow number": ind, "flow start": val[config.START], "flow end": val[config.END]}).Info("Flow times")
-			}
-			for key, val := range report.Delay[alg] {
-				log.WithFields(log.Fields{"time sent": key, "rtt": val, "alg": alg}).Info("Ping Times")
-			}
-		} else {
-			log.WithFields(log.Fields{"IP": IP}).Warn("UDP sending timed out")
-		}
 
-	}
-	log.Debug("Finished UDP algorithms")
+		}
+		log.Debug("Finished UDP algorithms")
+	*/
 	for _, alg := range tcp_algorithms {
 		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
 		runExperiment(measureTCP, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT)
@@ -507,8 +510,9 @@ func CheckErrMsg(err error, message string) {
 func main() {
 	// bootstrap -- ask one known server for a list of other server IP
 	//ip_list := getIPS()
-	mahimahi := os.Getenv("MAHIMAHI_BASE")
-	ip_list := []string{mahimahi}
+	//mahimahi := os.Getenv("MAHIMAHI_BASE")
+	//ip_list := []string{mahimahi}
+	ip_list := []string{"128.52.170.177"}
 	log.Info(ip_list)
 
 	for _, IP := range ip_list {
