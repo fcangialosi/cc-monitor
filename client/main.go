@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"io"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -510,9 +511,9 @@ func CheckErrMsg(err error, message string) {
 func main() {
 	// bootstrap -- ask one known server for a list of other server IP
 	//ip_list := getIPS()
-	//mahimahi := os.Getenv("MAHIMAHI_BASE")
-	//ip_list := []string{mahimahi}
-	ip_list := []string{"128.52.170.177"}
+	mahimahi := os.Getenv("MAHIMAHI_BASE")
+	ip_list := []string{mahimahi}
+	//ip_list := []string{"128.52.170.177"}
 	log.Info(ip_list)
 
 	for _, IP := range ip_list {
