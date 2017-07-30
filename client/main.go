@@ -440,7 +440,7 @@ func GetOutboundIP() string {
 func runExperimentOnMachine(IP string) {
 	// runs the experiment on the given machine, and uploads the results to the DB server
 	// addresses and algorithms to test
-	// udp_algorithms := []string{"remy"}
+	udp_algorithms := []string{"remy"}
 	//tcp_algorithms := []string{"cubic", "bbr"}
 	tcp_algorithms := []string{"cubic"}
 	client_ip := GetOutboundIP()
@@ -452,28 +452,26 @@ func runExperimentOnMachine(IP string) {
 		Delay:      make(map[string]map[float64]float64),
 		FlowTimes:  make(map[string][]map[string]float64)}
 
-	/*
-		for _, alg := range udp_algorithms {
-			log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
-			timed_out := runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT)
-			if !timed_out {
-				for ind, val := range report.Throughput[alg] {
-					log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
-					log.WithFields(log.Fields{"throughput dict": val}).Info("Dict")
-				}
-				for ind, val := range report.FlowTimes[alg] {
-					log.WithFields(log.Fields{"flow number": ind, "flow start": val[config.START], "flow end": val[config.END]}).Info("Flow times")
-				}
-				for key, val := range report.Delay[alg] {
-					log.WithFields(log.Fields{"time sent": key, "rtt": val, "alg": alg}).Info("Ping Times")
-				}
-			} else {
-				log.WithFields(log.Fields{"IP": IP}).Warn("UDP sending timed out")
+	for _, alg := range udp_algorithms {
+		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
+		timed_out := runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT)
+		if !timed_out {
+			for ind, val := range report.Throughput[alg] {
+				log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
+				log.WithFields(log.Fields{"throughput dict": val}).Info("Dict")
 			}
-
+			for ind, val := range report.FlowTimes[alg] {
+				log.WithFields(log.Fields{"flow number": ind, "flow start": val[config.START], "flow end": val[config.END]}).Info("Flow times")
+			}
+			for key, val := range report.Delay[alg] {
+				log.WithFields(log.Fields{"time sent": key, "rtt": val, "alg": alg}).Info("Ping Times")
+			}
+		} else {
+			log.WithFields(log.Fields{"IP": IP}).Warn("UDP sending timed out")
 		}
-		log.Debug("Finished UDP algorithms")
-	*/
+
+	}
+	log.Debug("Finished UDP algorithms")
 	for _, alg := range tcp_algorithms {
 		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
 		runExperiment(measureTCP, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT)
