@@ -87,7 +87,6 @@ func EncodeCCResults(cc *CCResults) []byte {
 func DecodeCCResults(data []byte) CCResults {
 	results := CCResults{}
 	r := bytes.NewBuffer(data)
-  log.WithFields(log.Fields{"data": data}).Info("wut")
 	if data == nil || len(data) < 1 {
 		log.Error("error decoding into CCResults struct")
 	}

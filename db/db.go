@@ -146,7 +146,7 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
     go func(results.CCResults) {
       log.Info("got decoded report from channel")
       server_ip := report.ServerIP
-      client_ip := report.ClientIP
+      client_ip := strings.Split(report.ClientIP, ":")[0]
       current_date := currentDate()
       current_time := currentTime()
 
@@ -156,7 +156,7 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
       if ( location != "NOT_FOUND" ) {
         server_file = fmt.Sprintf("%s_logs", location)
       }
-      filename := fmt.Sprintf("%s_%s", client_ip, current_time)
+      filename := fmt.Sprintf("%s_%s.log", client_ip, current_time)
       path := fmt.Sprintf("exp_results/%s/%s", server_file, current_date)
       err := os.MkdirAll(path, 0777)
       if err != nil {
@@ -185,7 +185,7 @@ func currentDate() string {
 
 func currentTime() string {
   hour, min, sec := time.Now().Clock()
-  return fmt.Sprintf("%d:%d:%d", hour, min, sec)
+  return fmt.Sprintf("%d.%d.%d", hour, min, sec)
 }
 
 func checkError(err error) {
