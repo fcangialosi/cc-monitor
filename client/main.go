@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"io"
 	"net"
-	"os"
+	//"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -406,7 +406,7 @@ func sendReport(report []byte) {
 }
 
 /*Contact the known DB server for a list of IPs to run the experiment at*/
-func getIPS() []string {
+func getIPS() results.IPList {
 	conn, err := net.Dial("tcp", config.DB_IP+":"+config.IP_SERVER_PORT)
 	defer conn.Close()
 	CheckError(err)
@@ -420,8 +420,8 @@ func getIPS() []string {
 	CheckError(err)
 	ip_list := results.DecodeIPList(recv_buf[:n])
 
-	for _, val := range ip_list {
-		log.WithFields(log.Fields{"IP": val}).Info("IP")
+	for key, val := range ip_list {
+    log.WithFields(log.Fields{"IP": key, "alg map": val}).Info("IP")
 	}
 	return ip_list
 
@@ -437,12 +437,12 @@ func GetOutboundIP() string {
 	return localAddr[0:idx]
 }
 
-func runExperimentOnMachine(IP string) {
+func runExperimentOnMachine(IP string, alg_map map[string][]string) {
+
 	// runs the experiment on the given machine, and uploads the results to the DB server
 	// addresses and algorithms to test
-	udp_algorithms := []string{"remy"}
-	//tcp_algorithms := []string{"cubic", "bbr"}
-	tcp_algorithms := []string{"cubic"}
+	udp_algorithms := alg_map["UDP"]
+	tcp_algorithms := alg_map["TCP"]
 	client_ip := GetOutboundIP()
 
 	report := results.CCResults{
@@ -508,14 +508,14 @@ func CheckErrMsg(err error, message string) {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 	// bootstrap -- ask one known server for a list of other server IP
-	//ip_list := getIPS()
-	mahimahi := os.Getenv("MAHIMAHI_BASE")
+	ip_map := getIPS()
+  /*mahimahi := os.Getenv("MAHIMAHI_BASE")
 	ip_list := []string{mahimahi}
 	//ip_list := []string{"128.52.170.177"}
-	log.Info(ip_list)
+	log.Info(ip_list)*/
 
-	for _, IP := range ip_list {
-		runExperimentOnMachine(IP)
+	for IP, val := range ip_map {
+		runExperimentOnMachine(IP, val)
 	}
 
 }

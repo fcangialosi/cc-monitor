@@ -6,6 +6,8 @@ import (
 	"io"
 	"net"
 	"os"
+  "time"
+  "strings"
 
 	"../config"
 	"../results"
@@ -13,16 +15,37 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func getIPList(ip_file string) []string {
-	ip_list := make([]string, 0)
+func getIPList(ip_file string) results.IPList {
+  ip_list := make(map[string](map[string][]string))
 	file, err := os.Open(ip_file)
 	defer file.Close()
 	checkError(err)
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		ip := scanner.Text()
-		ip_list = append(ip_list, ip)
-		log.WithFields(log.Fields{"IP": ip}).Info("IP LIST")
+    ip_line := scanner.Text() // line: IP UDP alg1 alg2 TCP alg1 alg2 ....
+    ip_line_split := strings.Split(ip_line, " ")
+    ip := ip_line_split[0]
+    udp_algorithms := make([]string, 0)
+    tcp_algorithms := make([]string, 0)
+    udp := true
+    for _, val := range ip_line_split[2:] { // first val is IP, 2nd val is "UDP"
+      if val == "TCP" {
+        udp = false
+        continue
+      }
+      if udp {
+        udp_algorithms = append(udp_algorithms, val)
+      } else {
+        tcp_algorithms = append(tcp_algorithms, val)
+      }
+    }
+
+    alg_map := make(map[string][]string)
+    alg_map["UDP"] = udp_algorithms
+    alg_map["TCP"] = tcp_algorithms
+
+    ip_list[ip] = alg_map
+    log.WithFields(log.Fields{"IP": ip, "alg map": alg_map}).Info("IP LIST")
 	}
 	checkError(scanner.Err())
 	return ip_list
@@ -72,24 +95,23 @@ func dbServer(ch chan results.CCResults) {
 		}
 		go func(c *net.TCPConn) {
 			defer conn.Close()
-			p := make([]byte, config.TRANSFER_BUF_SIZE)
-			report_bytes := make([]byte, 0)
-			ack := []byte(config.ACK)
+			//p := make([]byte, 15000) // large buf size
+			report_bytes := make([]byte, 15000)
+			//ack := []byte(config.ACK)
 			// read until client sends "end"
-			for {
-				n, err := conn.Read(p)
-				if err == io.EOF {
-					break // client closes the TCP connection
-				}
-				conn.Write(ack)
-				checkError(err)
-				if string(p[:n]) == config.FIN {
-					log.Info("ending reading data because received fin")
-					break
-				}
-				report_bytes = append(report_bytes, p[:n]...)
-				log.WithFields(log.Fields{"n": n}).Info("bytes received")
-			}
+			_, err := conn.Read(report_bytes)
+      if err == io.EOF {
+        log.Warn("client didn't send report?")
+        return
+      }
+				//conn.Write(ack)
+				//checkError(err)
+				//if string(p[:n]) == config.FIN {
+					//log.Info("ending reading data because received fin")
+					//break
+				//}
+				//report_bytes = append(report_bytes, p[:n]...)
+				//log.WithFields(log.Fields{"n": n}).Info("bytes received")
 			// send this job to the dbWorker to upload to the database
 			report := results.DecodeCCResults(report_bytes)
 			report.ClientIP = conn.RemoteAddr().String() // client didn't put in right IP for some reason
@@ -108,7 +130,7 @@ func dbWorker(ch chan results.CCResults) {
 	defer db.Close()
 	checkError(err)
 
-	// check connection to db
+  // check connection to db
 	err = db.Ping()
 	checkError(err)
 
@@ -137,6 +159,16 @@ func checkError(err error) {
 
 /*This file is for solely handling the database*/
 func main() {
+  start := time.Now()
+
+  time.Sleep(time.Second*2)
+  elapsed := time.Since(start)
+  elapsed_ms := elapsed.Seconds()* float64(time.Second/time.Millisecond)
+  log.WithFields(log.Fields{"elapsed": elapsed_ms}).Info("elapsed time")
+  // get the ip list for tests
+  ip_list := getIPList(config.IP_LIST_LOCATION)
+  log.Info(ip_list)
+
 	quit := make(chan struct{})
 	go introServer(config.IP_LIST_LOCATION)
 	db_channel := make(chan results.CCResults)

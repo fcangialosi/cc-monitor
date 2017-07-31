@@ -6,7 +6,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 )
-
+type IPList map[string](map[string][]string)
 type CCResults struct {
 	ServerIP   string
 	ClientIP   string
@@ -26,15 +26,15 @@ type DBResult struct {
 	FlowTimes  []map[string]float64
 }
 
-func EncodeIPList(list []string) []byte {
+func EncodeIPList(list IPList) []byte {
 	w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
 	e.Encode(list)
 	return w.Bytes()
 }
 
-func DecodeIPList(data []byte) []string {
-	var res []string
+func DecodeIPList(data []byte) IPList {
+	var res IPList
 	r := bytes.NewBuffer(data)
 	if data == nil || len(data) < 1 {
 		log.Error("error decoding into IP list")
