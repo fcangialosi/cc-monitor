@@ -58,6 +58,8 @@ const END = "END"
 const REMY = "remy"
 const CUBIC = "cubic"
 const BBR = "bbr"
+const VEGAS = "vegas"
+const RENO = "reno"
 
 // protocol names
 const TCP = "tcp"

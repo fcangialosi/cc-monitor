@@ -3,7 +3,7 @@ package results
 import (
 	"bytes"
 	"encoding/gob"
-
+  "compress/gzip"
 	log "github.com/sirupsen/logrus"
 )
 type IPList map[string](map[string][]string)
@@ -87,6 +87,7 @@ func EncodeCCResults(cc *CCResults) []byte {
 func DecodeCCResults(data []byte) CCResults {
 	results := CCResults{}
 	r := bytes.NewBuffer(data)
+  log.WithFields(log.Fields{"data": data}).Info("wut")
 	if data == nil || len(data) < 1 {
 		log.Error("error decoding into CCResults struct")
 	}
@@ -102,7 +103,11 @@ func DecodeCCResults(data []byte) CCResults {
 /*Turn CCResult into DBResult*/
 func BreakUpCCResult(cc *CCResults) map[string][]byte {
 	result_map := make(map[string][]byte)
+  for key, _ := range cc.Throughput {
+    log.WithFields(log.Fields{"alg": key}).Info("DB RESULT")
+  }
 	for key, thr := range cc.Throughput {
+    log.WithFields(log.Fields{"alg": key}).Info("DB RESULT")
 		db_result := &DBResult{}
 		db_result.Alg = key
 		db_result.Throughput = thr
@@ -110,7 +115,18 @@ func BreakUpCCResult(cc *CCResults) map[string][]byte {
 		db_result.FlowTimes = cc.FlowTimes[key]
 		db_result.ServerIP = cc.ServerIP
 		db_result.ClientIP = cc.ClientIP
-		result_map[key] = EncodeDBResult(db_result)
+		result_map[key] = compress_array(EncodeDBResult(db_result))
 	}
 	return result_map
 }
+// TODO: add in decompress to get the results back
+func compress_array(input []byte) []byte {
+  var buf bytes.Buffer
+  compr := gzip.NewWriter(&buf)
+  compr.Write(input)
+  compr.Close()
+  log.WithFields(log.Fields{"before":len(input), "after": len(buf.Bytes())})
+  return buf.Bytes()
+
+}
+

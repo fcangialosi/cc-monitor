@@ -2,16 +2,15 @@ package main
 
 import (
 	"bufio"
-	"database/sql"
 	"io"
 	"net"
 	"os"
   "time"
   "strings"
+  "fmt"
 
 	"../config"
 	"../results"
-	_ "github.com/go-sql-driver/mysql"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -24,11 +23,12 @@ func getIPList(ip_file string) results.IPList {
 	for scanner.Scan() {
     ip_line := scanner.Text() // line: IP UDP alg1 alg2 TCP alg1 alg2 ....
     ip_line_split := strings.Split(ip_line, " ")
+    log.Info(ip_line_split)
     ip := ip_line_split[0]
     udp_algorithms := make([]string, 0)
     tcp_algorithms := make([]string, 0)
     udp := true
-    for _, val := range ip_line_split[2:] { // first val is IP, 2nd val is "UDP"
+    for _, val := range ip_line_split[3:] { // first val is IP, 2nd val is location, 3rd val is "UDP"
       if val == "TCP" {
         udp = false
         continue
@@ -49,6 +49,24 @@ func getIPList(ip_file string) results.IPList {
 	}
 	checkError(scanner.Err())
 	return ip_list
+}
+
+func getIPLocation(ip_file string, input_ip string) string {
+	file, err := os.Open(ip_file)
+	defer file.Close()
+	checkError(err)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+    ip_line := scanner.Text() // line: IP UDP alg1 alg2 TCP alg1 alg2 ....
+    ip_line_split := strings.Split(ip_line, " ")
+    ip := ip_line_split[0]
+    location := ip_line_split[1]
+    if ip == input_ip {
+      return location
+    }
+	}
+	checkError(scanner.Err())
+	return "NOT_FOUND"
 }
 func introServer(ip_file string) {
 
@@ -90,29 +108,25 @@ func dbServer(ch chan results.CCResults) {
 
 	for {
 		conn, err := server.AcceptTCP()
+    log.Info("Got a report to read from the client")
 		if err != nil {
 			log.Warning(err)
 		}
 		go func(c *net.TCPConn) {
 			defer conn.Close()
-			//p := make([]byte, 15000) // large buf size
-			report_bytes := make([]byte, 15000)
-			//ack := []byte(config.ACK)
-			// read until client sends "end"
-			_, err := conn.Read(report_bytes)
-      if err == io.EOF {
-        log.Warn("client didn't send report?")
-        return
-      }
-				//conn.Write(ack)
-				//checkError(err)
-				//if string(p[:n]) == config.FIN {
-					//log.Info("ending reading data because received fin")
-					//break
-				//}
-				//report_bytes = append(report_bytes, p[:n]...)
+			p := make([]byte, 15000) // large buf size
+			report_bytes := make([]byte, 0)
+			// read until client sends EOF
+      for {
+			  n, err := conn.Read(p)
+        if err == io.EOF {
+          log.Warn("client left")
+          break
+        }
+			  report_bytes = append(report_bytes, p[:n]...)
 				//log.WithFields(log.Fields{"n": n}).Info("bytes received")
-			// send this job to the dbWorker to upload to the database
+      }
+      log.Info("Finished reading the report")
 			report := results.DecodeCCResults(report_bytes)
 			report.ClientIP = conn.RemoteAddr().String() // client didn't put in right IP for some reason
 			ch <- report
@@ -121,34 +135,57 @@ func dbServer(ch chan results.CCResults) {
 
 }
 
-func dbWorker(ch chan results.CCResults) {
+func dbWorker(ch chan results.CCResults, ip_file string) {
 	// TODO reads jobs from channel, writes them to db
-	// sets up connection with the database
-	connection_info := config.DB_USERNAME + ":" + config.DB_PASSWORD + "@tcp(localhost:3306)" + "/" + config.DB_NAME + "?charset=utf8"
-	//connection_info := "goserver:password@tcp(" + config.DB_IP + ":3306)/" + config.DB_NAME + "?charset=utf8"
-	db, err := sql.Open("mysql", connection_info)
-	defer db.Close()
-	checkError(err)
+  // db in this case is just writing a file with the results
 
-  // check connection to db
-	err = db.Ping()
-	checkError(err)
-
-	// read jobs from resuls channel forever
+	// read jobs from results channel forever
 	for {
 		report := <-ch
-		db_result := results.BreakUpCCResult(&report)
-		// TODO: add in bbr for realz
-		remy_blob := db_result[config.REMY]
-		cubic_blob := db_result[config.CUBIC]
-		bbr_blob := []byte("bbr")
-		client_ip := report.ClientIP
-		server_ip := report.ServerIP
-		stmt, err := db.Prepare("INSERT " + config.DB_TABLE_NAME + " SET remy=?,cubic=?,bbr=?,timestamp=NOW(),client_ip=?,server_ip=?")
-		checkError(err)
-		_, err = stmt.Exec(remy_blob, cubic_blob, bbr_blob, client_ip, server_ip)
-		checkError(err)
-	}
+    // spawn go routine to deal with this report
+    go func(results.CCResults) {
+      log.Info("got decoded report from channel")
+      server_ip := report.ServerIP
+      client_ip := report.ClientIP
+      current_date := currentDate()
+      current_time := currentTime()
+
+      // check if everything exists
+      server_file := fmt.Sprintf("%s_logs", server_ip)
+      location := getIPLocation(ip_file, server_ip)
+      if ( location != "NOT_FOUND" ) {
+        server_file = fmt.Sprintf("%s_logs", location)
+      }
+      filename := fmt.Sprintf("%s_%s", client_ip, current_time)
+      path := fmt.Sprintf("exp_results/%s/%s", server_file, current_date)
+      err := os.MkdirAll(path, 0777)
+      if err != nil {
+        log.WithFields(log.Fields{"err": err, "path": path}).Panic("Creating path to store results")
+      }
+      full_path := path + "/" + filename
+      f, err := os.Create(full_path)
+      checkErrMsg(err, "creating file for path " + full_path)
+      log.WithFields(log.Fields{"path": full_path}).Info("Writing decoded results")
+      defer f.Close()
+
+     // marshall the struct
+     b := results.EncodeCCResults(&report)
+    checkErrMsg(err, "marshalling report into bytes")
+    _, err = f.Write(b)
+    checkErrMsg(err, "writing bytes to file")
+    }(report)
+
+  }
+}
+
+func currentDate() string {
+  _, month, day := time.Now().Date()
+  return fmt.Sprintf("%s-%d", month.String(), day)
+}
+
+func currentTime() string {
+  hour, min, sec := time.Now().Clock()
+  return fmt.Sprintf("%d:%d:%d", hour, min, sec)
 }
 
 func checkError(err error) {
@@ -157,8 +194,16 @@ func checkError(err error) {
 	}
 }
 
+func checkErrMsg(err error, msg string) {
+  if err != nil {
+    log.WithFields(log.Fields{"msg": msg}).Panic(err)
+  }
+}
+
 /*This file is for solely handling the database*/
 func main() {
+  log.Info(currentDate())
+  log.Info(currentTime())
   start := time.Now()
 
   time.Sleep(time.Second*2)
@@ -173,7 +218,7 @@ func main() {
 	go introServer(config.IP_LIST_LOCATION)
 	db_channel := make(chan results.CCResults)
 	go dbServer(db_channel)
-	go dbWorker(db_channel)
+	go dbWorker(db_channel, config.IP_LIST_LOCATION)
 	<-quit
 
 }
