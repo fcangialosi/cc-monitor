@@ -117,7 +117,7 @@ func pingServerTCP() {
 				if err == io.EOF {
 					return // client disconnected
 				}
-				log.WithFields(log.Fields{"i": string(recv[:n])}).Info("got ping")
+				//log.WithFields(log.Fields{"i": string(recv[:n])}).Info("got ping")
 				c.Write(recv[:n])
 			}
 		}(conn, p)
@@ -201,11 +201,12 @@ func handleRequestTCP(conn *net.TCPConn) {
 		off_dist := createExpDist(config.MEAN_OFF_TIME_MS, prng)
 
 		for i := 0; i < config.NUM_CYCLES; i++ {
-			on_time := time.Millisecond*time.Duration(on_dist.Sample()) + config.MIN_ON_TIME
+			on_time := time.Millisecond * time.Duration(on_dist.Sample()+config.MEAN_ON_TIME_MS)
 			on_timer := time.After(on_time)
 			// on - send start flow message
 			log.WithFields(log.Fields{"on": on_time}).Info("new on for tcp")
 			conn.Write(startBuf)
+			log.Info("Wrote to start buf")
 			reqbuf := make([]byte, config.ACK_LEN)
 			conn.Read(reqbuf)
 		sendloop:
@@ -214,7 +215,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 				case <-on_timer:
 					break sendloop
 				default:
-					//log.Warn("Writing to TCP connection")
+					//log.Warn("Waiting to write to TCP connection")
 					conn.Write(sendBuf)
 				}
 			}
