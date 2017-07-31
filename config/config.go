@@ -40,6 +40,7 @@ const TCP_CONGESTION = 0xd
 const MEAN_ON_TIME_MS = 10000
 const MEAN_OFF_TIME_MS = 3000
 const MIN_ON_TIME = 1000 // atleast send for one second
+const MIN_OFF_TIME = 500
 const NUM_CYCLES = 5
 const TRANSFER_BUF_SIZE = 2048
 const PATH_TO_GENERIC_CC = "/home/ubuntu/genericCC/sender"

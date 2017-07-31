@@ -220,7 +220,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 				}
 			}
 			log.Info("Done with on - about to go into off period")
-			off_time := time.Millisecond * time.Duration(off_dist.Sample())
+			off_time := time.Millisecond * (time.Duration(off_dist.Sample()) + config.MIN_OFF_TIME)
 			log.WithFields(log.Fields{"off": off_time}).Info("new off for tcp")
 			<-time.After(off_time)
 		}
