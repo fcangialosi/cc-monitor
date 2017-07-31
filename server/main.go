@@ -201,7 +201,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 		off_dist := createExpDist(config.MEAN_OFF_TIME_MS, prng)
 
 		for i := 0; i < config.NUM_CYCLES; i++ {
-			on_time := time.Millisecond * time.Duration(on_dist.Sample()+config.MEAN_ON_TIME_MS)
+			on_time := time.Millisecond * (time.Duration(on_dist.Sample()) + config.MIN_ON_TIME)
 			on_timer := time.After(on_time)
 			// on - send start flow message
 			log.WithFields(log.Fields{"on": on_time}).Info("new on for tcp")
