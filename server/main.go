@@ -197,7 +197,6 @@ func handleRequestTCP(conn *net.TCPConn) {
 		// generate on/off distributions
 		prng := getNewPRNG()
 		on_dist := createExpDist(config.MEAN_ON_TIME_MS, prng)
-		off_dist := createExpDist(config.MEAN_OFF_TIME_MS, prng)
 
 		on_time := time.Millisecond * time.Duration(on_dist.Sample()+config.MEAN_ON_TIME_MS)
 		// on - send start flow message
@@ -214,19 +213,13 @@ func handleRequestTCP(conn *net.TCPConn) {
 			case <-on_timer:
 				break sendloop
 			default:
-				log.Warn("Waiting to write to TCP connection")
+				//log.Warn("Waiting to write to TCP connection")
 				conn.Write(sendBuf)
 			}
 		}
-		log.Info("Done with on - about to go into off period")
-		off_time := time.Millisecond * time.Duration(off_dist.Sample())
-		log.WithFields(log.Fields{"off": off_time}).Info("new off for tcp")
-		<-time.After(off_time)
+		log.Info("Done with on - about to close connection")
 		err = conn.Close()
-		log.Info(err)
-		log.Info("that was err above this")
 	}
-	log.Info("finished loop")
 	return
 }
 
