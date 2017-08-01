@@ -42,8 +42,8 @@ func measureThroughput(start time.Time, bytes_received float64, m map[float64]fl
 	time := elapsed(start)
 	entire_throughput := singleThroughputMeasurement(time, bytes_received)
 	m[bytes_received] = entire_throughput
-	/*// log.WithFields(log.Fields{"mbps": singleThroughputMeasurement(time, bytes_received)}).Info()
-	received := next_measurement
+	//log.WithFields(log.Fields{"mbps": singleThroughputMeasurement(time, bytes_received)}).Info()
+	/*received := next_measurement
 	for received <= bytes_received {
 		// add an entry into the map
 		m[received] = entire_throughput
@@ -90,22 +90,24 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		if string(recvBuf[:n]) != config.START_FLOW {
 			log.Error("Did not receive start from server")
 		}
-		log.Info("Got start")
+		//log.Info("Got start")
 		conn.Write([]byte(config.ACK))
 		CheckErrMsg(err, "opening TCP connection")
 
 		for {
-			log.Info("Waiting to read")
+			//log.Info("Waiting to read")
+			conn.SetReadDeadline(time.Now().Add(config.TCP_TIMEOUT * time.Second))
 			n, err := conn.Read(recvBuf)
-			log.Info("read")
+			//log.Info("read")
 			last_received_time = elapsed(start)
 
 			if err == io.EOF {
-				log.Warn("server closed connection")
+				//log.Warn("server closed connection")
 				break
-			}
-
-			if err != nil {
+			} else if err, ok := err.(net.Error); ok && err.Timeout() {
+				//log.Warn("timed out on read")
+				break
+			} else if err != nil {
 				log.Error(err)
 			}
 
@@ -117,6 +119,8 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		flow_times[current_flow][config.END] = last_received_time
 		conn.Close() // close connection before next one
 		current_flow++
+		// sleep for some time
+		time.Sleep(time.Second * 5)
 	}
 
 	end_ch <- time.Time{} // can stop sending pings
@@ -512,6 +516,8 @@ func runExperimentOnMachine(IP string, alg_map map[string][]string) {
 	// addresses and algorithms to test
 	udp_algorithms := alg_map["UDP"]
 	tcp_algorithms := alg_map["TCP"]
+	// tcp_algorithms = []string{"cubic"}
+	// udp_algorithms = []string{}
 	client_ip := GetOutboundIP()
 
 	report := results.CCResults{
