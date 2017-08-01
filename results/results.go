@@ -26,22 +26,25 @@ type DBResult struct {
 	FlowTimes  []map[string]float64
 }
 
-func EncodeIPList(list IPList) []byte {
+func EncodeIPList(list IPList, num_cycles int) []byte {
 	w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
 	e.Encode(list)
+  e.Encode(num_cycles)
 	return w.Bytes()
 }
 
-func DecodeIPList(data []byte) IPList {
+func DecodeIPList(data []byte) (IPList, int) {
 	var res IPList
+  var num_cycles int
 	r := bytes.NewBuffer(data)
 	if data == nil || len(data) < 1 {
 		log.Error("error decoding into IP list")
 	}
 	d := gob.NewDecoder(r)
 	d.Decode(&res)
-	return res
+  d.Decode(&num_cycles)
+	return res, num_cycles
 }
 
 /*Encodes cc result struct*/

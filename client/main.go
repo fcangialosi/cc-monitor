@@ -56,12 +56,12 @@ func measureThroughput(start time.Time, bytes_received float64, m map[float64]fl
 // NOTE: this function is basically a copy of start_remy, except I didn't want them to use the same function,
 // because the remy function requires the echo packet step, and I didn't want to add a condition to check for - if it's tcp or remy (unnecessary time)
 
-func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []map[string]float64, bool) {
-	flow_throughputs := make([]map[float64]float64, config.NUM_CYCLES)
-	flow_times := make([]map[string]float64, config.NUM_CYCLES)
+func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time, num_cycles int) ([]map[float64]float64, []map[string]float64, bool) {
+	flow_throughputs := make([]map[float64]float64, num_cycles)
+	flow_times := make([]map[string]float64, num_cycles)
 
 	k := 0
-	for k < config.NUM_CYCLES {
+	for k < num_cycles {
 		flow_throughputs[k] = map[float64]float64{}
 		flow_times[k] = map[string]float64{}
 		flow_times[k][config.START] = float64(0)
@@ -74,7 +74,7 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 	// loop over each cycle and request TCP server for "1" on and off
 	current_flow := 0
-	for current_flow < config.NUM_CYCLES {
+	for current_flow < num_cycles {
 		last_received_time := float64(0)
 		recvBuf := make([]byte, config.TCP_TRANSFER_SIZE)
 		bytes_received := float64(0)
@@ -128,16 +128,16 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 }
 
-func measureTCP(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []map[string]float64, bool) {
-	flow_throughputs := make([]map[float64]float64, config.NUM_CYCLES)
+func measureTCP(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time, num_cycles int) ([]map[float64]float64, []map[string]float64, bool) {
+	flow_throughputs := make([]map[float64]float64, num_cycles)
 	bytes_received := float64(0)
 	recvBuf := make([]byte, config.TCP_TRANSFER_SIZE)
 	//next_measurement := float64(1000)
-	flow_times := make([]map[string]float64, config.NUM_CYCLES)
+	flow_times := make([]map[string]float64, num_cycles)
 	current_flow := -1
-	end_flow_times := make([]float64, config.NUM_CYCLES+1)
+	end_flow_times := make([]float64, num_cycles+1)
 	k := 0
-	for k < config.NUM_CYCLES {
+	for k < num_cycles {
 		flow_throughputs[k] = map[float64]float64{}
 		flow_times[k] = map[string]float64{}
 		flow_times[k][config.START] = float64(0)
@@ -190,7 +190,7 @@ func measureTCP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 	log.Info("Trying to send pings to end tcp measuring")
 	end_ch <- time.Time{} // can stop sending pings
 	i := 0
-	for i < config.NUM_CYCLES {
+	for i < num_cycles {
 		flow_times[i][config.END] = end_flow_times[i+1]
 		i++
 	}
@@ -198,19 +198,19 @@ func measureTCP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 }
 
 /*Very similar to start tcp, except sends back a packet with the rec. timestamp*/
-func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []map[string]float64, bool) {
-	flow_throughputs := make([]map[float64]float64, config.NUM_CYCLES)
+func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time, num_cycles int) ([]map[float64]float64, []map[string]float64, bool) {
+	flow_throughputs := make([]map[float64]float64, num_cycles)
 	bytes_received := float64(0)
 	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
 	shouldEcho := (alg == "remy")
 	//next_measurement := float64(config.INITIAL_X_VAL)
-	flow_times := make([]map[string]float64, config.NUM_CYCLES)
-	end_flow_times := make([]float64, config.NUM_CYCLES+1)
+	flow_times := make([]map[string]float64, num_cycles)
+	end_flow_times := make([]float64, num_cycles+1)
 	current_flow := 0
 	started_flow := false
 	timed_out := false
 	k := 0
-	for k < config.NUM_CYCLES {
+	for k < num_cycles {
 		flow_throughputs[k] = map[float64]float64{}
 		flow_times[k] = map[string]float64{}
 		flow_times[k][config.START] = float64(0)
@@ -322,7 +322,7 @@ func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 	end_ch <- time.Time{} // can stop sending pings
 	log.Info("Returning from the UDP thing")
 	i := 0
-	for i < config.NUM_CYCLES {
+	for i < num_cycles {
 		flow_times[i][config.END] = end_flow_times[i+1]
 		i++
 	}
@@ -411,19 +411,19 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 	return rtt_dict
 }
 
-func runExperiment(f func(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []map[string]float64, bool), IP string, alg string, report *results.CCResults, protocol string, port string) bool {
+func runExperiment(f func(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time, num_cycles int) ([]map[float64]float64, []map[string]float64, bool), IP string, alg string, report *results.CCResults, protocol string, port string, num_cycles int) bool {
 	var wg sync.WaitGroup
 	start_ping := make(chan time.Time)
 	end_ping := make(chan time.Time)
-	throughput := make([]map[float64]float64, config.NUM_CYCLES)
-	flow_times := make([]map[string]float64, config.NUM_CYCLES)
+	throughput := make([]map[float64]float64, num_cycles)
+	flow_times := make([]map[string]float64, num_cycles)
 	ping_results := map[float64]float64{}
 	timed_out := false
 
 	wg.Add(1)
 	go func(wg *sync.WaitGroup) {
 		defer wg.Done()
-		throughput, flow_times, timed_out = f(IP, alg, start_ping, end_ping)
+		throughput, flow_times, timed_out = f(IP, alg, start_ping, end_ping, num_cycles)
 	}(&wg)
 
 	wg.Add(1)
@@ -479,7 +479,7 @@ func sendReport(report []byte) {
 }
 
 /*Contact the known DB server for a list of IPs to run the experiment at*/
-func getIPS() results.IPList {
+func getIPS() (results.IPList, int) {
 	conn, err := net.Dial("tcp", config.DB_IP+":"+config.IP_SERVER_PORT)
 	defer conn.Close()
 	CheckError(err)
@@ -491,12 +491,12 @@ func getIPS() results.IPList {
 	// write ack, get back list of IPs
 	n, err := conn.Read(recv_buf)
 	CheckError(err)
-	ip_list := results.DecodeIPList(recv_buf[:n])
+	ip_list, num_cycles := results.DecodeIPList(recv_buf[:n])
 
 	for key, val := range ip_list {
-		log.WithFields(log.Fields{"IP": key, "alg map": val}).Info("IP")
+    log.WithFields(log.Fields{"IP": key, "alg map": val, "num_cycles" : num_cycles}).Info("IP")
 	}
-	return ip_list
+	return ip_list, num_cycles
 
 }
 
@@ -510,7 +510,7 @@ func GetOutboundIP() string {
 	return localAddr[0:idx]
 }
 
-func runExperimentOnMachine(IP string, alg_map map[string][]string) {
+func runExperimentOnMachine(IP string, alg_map map[string][]string, num_cycles int) {
 
 	// runs the experiment on the given machine, and uploads the results to the DB server
 	// addresses and algorithms to test
@@ -529,7 +529,7 @@ func runExperimentOnMachine(IP string, alg_map map[string][]string) {
 
 	for _, alg := range tcp_algorithms {
 		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
-		runExperiment(measureTCP2, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT)
+		runExperiment(measureTCP2, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, num_cycles)
 		for ind, val := range report.Throughput[alg] {
 			log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
 			log.WithFields(log.Fields{"throughput dict": val}).Info("Dict")
@@ -544,7 +544,7 @@ func runExperimentOnMachine(IP string, alg_map map[string][]string) {
 	log.Debug("Finished TCP algorithms")
 	for _, alg := range udp_algorithms {
 		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
-		timed_out := runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT)
+		timed_out := runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, num_cycles)
 		if !timed_out {
 			for ind, val := range report.Throughput[alg] {
 				log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
@@ -588,11 +588,11 @@ func main() {
 		m := make(map[string][]string)
 		m["UDP"] = []string{"remy"}
 		m["TCP"] = []string{"reno", "vegas"}
-		runExperimentOnMachine(mahimahi, m)
+		runExperimentOnMachine(mahimahi, m, config.NUM_CYCLES)
 	} else {
-		ip_map := getIPS()
+		ip_map, num_cycles := getIPS()
 		for IP, val := range ip_map {
-			runExperimentOnMachine(IP, val)
+			runExperimentOnMachine(IP, val, num_cycles)
 		}
 	}
 }

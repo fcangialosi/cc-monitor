@@ -27,10 +27,7 @@ func readfile(filepath string) {
   n, err := f.Read(b)
   checkErrMsg(err, "reading bytes into buf")
   results := results.DecodeCCResults(b[:n])
-
   log.Info(results)
-
-
 }
 
 func main(){
