@@ -171,7 +171,6 @@ func measureServerTCP() {
 }
 
 func handleRequestTCP(conn *net.TCPConn) {
-	defer conn.Close()
 	startBuf := []byte("START_FLOW")
 	reqBuf := make([]byte, config.MAX_REQ_SIZE)
 	n, err := conn.Read(reqBuf)
@@ -200,33 +199,35 @@ func handleRequestTCP(conn *net.TCPConn) {
 		on_dist := createExpDist(config.MEAN_ON_TIME_MS, prng)
 		off_dist := createExpDist(config.MEAN_OFF_TIME_MS, prng)
 
-		for i := 0; i < config.NUM_CYCLES; i++ {
-			on_time := time.Millisecond * (time.Duration(on_dist.Sample()) + config.MIN_ON_TIME)
-			on_timer := time.After(on_time)
-			// on - send start flow message
-			log.WithFields(log.Fields{"on": on_time}).Info("new on for tcp")
-			conn.Write(startBuf)
-			log.Info("Wrote to start buf")
-			reqbuf := make([]byte, config.ACK_LEN)
-			conn.Read(reqbuf)
-		sendloop:
-			for {
-				select {
-				case <-on_timer:
-					break sendloop
-				default:
-					//log.Warn("Waiting to write to TCP connection")
-					conn.Write(sendBuf)
-				}
+		on_time := time.Millisecond * time.Duration(on_dist.Sample()+config.MEAN_ON_TIME_MS)
+		// on - send start flow message
+		log.WithFields(log.Fields{"on": on_time}).Info("new on for tcp")
+		conn.Write(startBuf)
+		log.Info("Wrote to start buf")
+		buf := make([]byte, config.ACK_LEN)
+		conn.Read(buf) // wait for ack back
+		log.Info("Got ack")
+		on_timer := time.After(on_time)
+	sendloop:
+		for {
+			select {
+			case <-on_timer:
+				break sendloop
+			default:
+				log.Warn("Waiting to write to TCP connection")
+				conn.Write(sendBuf)
 			}
-			log.Info("Done with on - about to go into off period")
-			off_time := time.Millisecond * (time.Duration(off_dist.Sample()) + config.MIN_OFF_TIME)
-			log.WithFields(log.Fields{"off": off_time}).Info("new off for tcp")
-			<-time.After(off_time)
 		}
+		log.Info("Done with on - about to go into off period")
+		off_time := time.Millisecond * time.Duration(off_dist.Sample())
+		log.WithFields(log.Fields{"off": off_time}).Info("new off for tcp")
+		<-time.After(off_time)
+		err = conn.Close()
+		log.Info(err)
+		log.Info("that was err above this")
 	}
-	log.Info("Writing end to the TCP function")
-	conn.Write([]byte(config.FIN))
+	log.Info("finished loop")
+	return
 }
 
 func runGCC(srcport string, ip string, alg string) {
