@@ -56,6 +56,74 @@ func measureThroughput(start time.Time, bytes_received float64, m map[float64]fl
 // NOTE: this function is basically a copy of start_remy, except I didn't want them to use the same function,
 // because the remy function requires the echo packet step, and I didn't want to add a condition to check for - if it's tcp or remy (unnecessary time)
 
+func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []map[string]float64, bool) {
+	flow_throughputs := make([]map[float64]float64, config.NUM_CYCLES)
+	flow_times := make([]map[string]float64, config.NUM_CYCLES)
+
+	k := 0
+	for k < config.NUM_CYCLES {
+		flow_throughputs[k] = map[float64]float64{}
+		flow_times[k] = map[string]float64{}
+		flow_times[k][config.START] = float64(0)
+		flow_times[k][config.END] = float64(0)
+		k++
+	}
+
+	original_start := time.Now()
+	start_ch <- original_start // start pings now
+
+	// loop over each cycle and request TCP server for "1" on and off
+	current_flow := 0
+	for current_flow < config.NUM_CYCLES {
+		last_received_time := float64(0)
+		recvBuf := make([]byte, config.TCP_TRANSFER_SIZE)
+		bytes_received := float64(0)
+
+		// start connection
+		start := time.Now()
+		flow_times[current_flow][config.START] = elapsed(original_start) // TODO: get it to be exactly time between start and original start
+		conn, err := net.Dial("tcp", server_ip+":"+config.MEASURE_SERVER_PORT)
+		CheckErrMsg(err, "tcp connection to server")
+		conn.Write([]byte(alg))
+		// now wait for start
+		n, err := conn.Read(recvBuf)
+		if string(recvBuf[:n]) != config.START_FLOW {
+			log.Error("Did not receive start from server")
+		}
+		log.Info("Got start")
+		conn.Write([]byte(config.ACK))
+		CheckErrMsg(err, "opening TCP connection")
+
+		for {
+			log.Info("Waiting to read")
+			n, err := conn.Read(recvBuf)
+			log.Info("read")
+			last_received_time = elapsed(start)
+
+			if err == io.EOF {
+				log.Warn("server closed connection")
+				break
+			}
+
+			if err != nil {
+				log.Error(err)
+			}
+
+			bytes_received += float64(n)
+			last_received_time = elapsed(original_start)
+			measureThroughput(start, bytes_received, flow_throughputs[current_flow])
+
+		}
+		flow_times[current_flow][config.END] = last_received_time
+		conn.Close() // close connection before next one
+		current_flow++
+	}
+
+	end_ch <- time.Time{} // can stop sending pings
+	return flow_throughputs, flow_times, false
+
+}
+
 func measureTCP(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time) ([]map[float64]float64, []map[string]float64, bool) {
 	flow_throughputs := make([]map[float64]float64, config.NUM_CYCLES)
 	bytes_received := float64(0)
@@ -289,7 +357,7 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 					c, err := net.Dial(protocol, server_ip+":"+port)
 					defer c.Close()
 					CheckError(err)
-					// log.Info("Waiting to write ping")
+					//log.Info("Waiting to write ping")
 					send_timestamp := elapsed(start)
 					c.Write(pingBuf)
 					// log.Info("Waiting to read from ping buf")
@@ -455,7 +523,7 @@ func runExperimentOnMachine(IP string, alg_map map[string][]string) {
 
 	for _, alg := range tcp_algorithms {
 		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
-		runExperiment(measureTCP, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT)
+		runExperiment(measureTCP2, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT)
 		for ind, val := range report.Throughput[alg] {
 			log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
 			log.WithFields(log.Fields{"throughput dict": val}).Info("Dict")
@@ -509,7 +577,7 @@ func CheckErrMsg(err error, message string) {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 	// bootstrap -- ask one known server for a list of other server IP
-	if true {
+	if false {
 		mahimahi := os.Getenv("MAHIMAHI_BASE")
 		m := make(map[string][]string)
 		m["UDP"] = []string{"remy"}
