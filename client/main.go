@@ -100,7 +100,6 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 			conn.SetReadDeadline(time.Now().Add(config.TCP_TIMEOUT * time.Second))
 			n, err := conn.Read(recvBuf)
 			//log.Info("read")
-			last_received_time = elapsed(start)
 
 			if err == io.EOF || n <= 0 {
 				//log.Warn("server closed connection")
