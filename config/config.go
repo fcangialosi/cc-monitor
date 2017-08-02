@@ -3,7 +3,7 @@ package config
 // conversion
 const BYTES_TO_MBITS = .000008
 
-const DB_IP = "54.163.98.31"
+const DB_IP = "34.229.61.237"
 
 // DB
 const DB_NAME = "cc_test_data"
@@ -67,5 +67,5 @@ const TCP = "tcp"
 const UDP = "udp"
 
 // timeout for reading
-const CLIENT_TIMEOUT = 30 // 40 seconds before the client times out
+const CLIENT_TIMEOUT = 10 // 10 seconds before the client times out
 const TCP_TIMEOUT = 2     // 1 second to try to get data
