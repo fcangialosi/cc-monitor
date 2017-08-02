@@ -226,8 +226,9 @@ func handleRequestTCP(conn *net.TCPConn) {
 func runGCC(srcport string, ip string, alg string) {
 	port := config.CLIENT_UDP_PORT
 	on_time := strconv.Itoa(config.MEAN_ON_TIME_MS)
-	off_time := strconv.Itoa(config.MEAN_OFF_TIME_MS)
-	num_cycles := strconv.Itoa(config.NUM_CYCLES)
+	off_time := strconv.Itoa(0)   // have a 0 off time
+	num_cycles := strconv.Itoa(1) // send for 1 on and off period
+	log.WithFields(log.Fields{"num cycles": num_cycles}).Info("num cycles")
 
 	// Now we can start genericCC
 	// set MIN_RTT env variable
