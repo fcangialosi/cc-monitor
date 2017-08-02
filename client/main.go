@@ -217,7 +217,6 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	// for each flow, start a separate connection to the server to spawn genericCC
 	for flow := 0; flow < num_cycles; flow++ {
 		bytes_received := uint32(0)
-		last_received_time := float32(0)
 		shouldEcho := (alg == "remy")
 		recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
 
@@ -250,8 +249,9 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		conn.Write([]byte(config.ACK))
 
 		start := time.Now()
-		flow_start := start.Sub(original_start).Seconds() * 1000
-		flow_times[flow][config.START] = float32(flow_start)
+		flow_start := float32(start.Sub(original_start).Seconds() * 1000)
+		last_received_time := flow_start
+		flow_times[flow][config.START] = flow_start
 
 		for {
 			receiver.SetReadDeadline(time.Now().Add(config.CLIENT_TIMEOUT * time.Second)) // long timeout
@@ -277,6 +277,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		}
 
 		// close the connection to the TCP server and listening on UDP port
+		log.Info("Ending connection and putting in timestamps")
 		flow_times[flow][config.END] = last_received_time
 		conn.Close()
 		receiver.Close()
@@ -636,6 +637,9 @@ func runExperimentOnMachine(IP string, alg_map map[string][]string, num_cycles i
 		for ind, val := range report.FlowTimes[alg] {
 			log.WithFields(log.Fields{"flow number": ind, "flow start": val[config.START], "flow end": val[config.END]}).Info("Flow times")
 		}
+		for ind, val := range report.Throughput[alg] {
+			log.WithFields(log.Fields{"flow number": ind, "length of throughput dict": len(val)}).Info("throughput info")
+		}
 		// if !timed_out {
 		// 	for ind, val := range report.Throughput[alg] {
 		// 		log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
@@ -674,11 +678,11 @@ func CheckErrMsg(err error, message string) {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 	// bootstrap -- ask one known server for a list of other server IP
-	if false {
+	if true {
 		mahimahi := os.Getenv("MAHIMAHI_BASE")
 		m := make(map[string][]string)
 		m["UDP"] = []string{"remy"}
-		m["TCP"] = []string{"reno", "vegas"}
+		m["TCP"] = []string{}
 		runExperimentOnMachine(mahimahi, m, config.NUM_CYCLES)
 	} else {
 		ip_map, num_cycles := getIPS()
