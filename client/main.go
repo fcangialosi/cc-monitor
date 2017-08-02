@@ -260,7 +260,7 @@ func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 		receiver.SetReadDeadline(time.Now().Add(config.CLIENT_TIMEOUT * time.Second))
 
 		n, raddr, err := receiver.ReadFromUDP(recvBuf)
-		log.Info("read from udp")
+		//log.Info("read from udp")
 		// TODO maybe add one RTT here
 		if start_ping {
 			start = time.Now()
@@ -312,7 +312,7 @@ func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 
 		// echo packet with receive timestamp
 		if shouldEcho {
-			log.Info("-----")
+			//log.Info("-----")
 			echo := SetHeaderVal(recvBuf[:n], config.RECEIVE_TIMESTAMP_START, binary.LittleEndian, elapsed(start))
 			// TODO can just send back the recvbuf
 			receiver.WriteToUDP(echo.Bytes(), raddr)
@@ -352,27 +352,27 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 		for {
 			select {
 			case <-end_ch:
-				log.Debug("Got signal to end pings")
+				log.Warn("Got signal to end pings")
 				break sendloop
 			default:
 				go func(m results.TimeRTTMap) {
-					mutex.Lock()
+
 					recvBuf := make([]byte, config.PING_SIZE_BYTES)
 					c, err := net.Dial(protocol, server_ip+":"+port)
 					defer c.Close()
 					CheckError(err)
-					//log.Info("Waiting to write ping")
+					log.Info("Waiting to write ping")
 					send_timestamp := elapsed(start)
 					c.Write(pingBuf)
-					// log.Info("Waiting to read from ping buf")
+					log.Info("Waiting to read from ping buf")
 					_, err = c.Read(recvBuf)
 					recv_timestamp := elapsed(start)
 					CheckError(err)
 					rtt := (recv_timestamp - send_timestamp)
-					// mutex.Lock()
+					mutex.Lock()
 					m[send_timestamp] = rtt
 					mutex.Unlock()
-					//log.WithFields(log.Fields{"protocol": protocol, "rtt": rtt, "sent": send_timestamp}).Warn("Ping Info")
+					log.WithFields(log.Fields{"protocol": protocol, "rtt": rtt, "sent": send_timestamp}).Warn("Ping Info")
 				}(rtt_dict)
 			}
 			time.Sleep(time.Millisecond * 3000)
@@ -516,7 +516,7 @@ func runExperimentOnMachine(IP string, alg_map map[string][]string, num_cycles i
 	// addresses and algorithms to test
 	udp_algorithms := alg_map["UDP"]
 	tcp_algorithms := alg_map["TCP"]
-	// tcp_algorithms = []string{"cubic"}
+	// tcp_algorithms = []string{}
 	// udp_algorithms = []string{}
 	client_ip := GetOutboundIP()
 
@@ -544,21 +544,21 @@ func runExperimentOnMachine(IP string, alg_map map[string][]string, num_cycles i
 	log.Debug("Finished TCP algorithms")
 	for _, alg := range udp_algorithms {
 		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
-		timed_out := runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, num_cycles)
-		if !timed_out {
-			for ind, val := range report.Throughput[alg] {
-				log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
-				log.WithFields(log.Fields{"throughput dict": val}).Info("Dict")
-			}
-			for ind, val := range report.FlowTimes[alg] {
-				log.WithFields(log.Fields{"flow number": ind, "flow start": val[config.START], "flow end": val[config.END]}).Info("Flow times")
-			}
-			for key, val := range report.Delay[alg] {
-				log.WithFields(log.Fields{"time sent": key, "rtt": val, "alg": alg}).Info("Ping Times")
-			}
-		} else {
-			log.WithFields(log.Fields{"IP": IP}).Warn("UDP sending timed out")
-		}
+		runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, num_cycles)
+		// if !timed_out {
+		// 	for ind, val := range report.Throughput[alg] {
+		// 		log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
+		// 		log.WithFields(log.Fields{"throughput dict": val}).Info("Dict")
+		// 	}
+		// 	for ind, val := range report.FlowTimes[alg] {
+		// 		log.WithFields(log.Fields{"flow number": ind, "flow start": val[config.START], "flow end": val[config.END]}).Info("Flow times")
+		// 	}
+		// 	for key, val := range report.Delay[alg] {
+		// 		log.WithFields(log.Fields{"time sent": key, "rtt": val, "alg": alg}).Info("Ping Times")
+		// 	}
+		// } else {
+		// 	log.WithFields(log.Fields{"IP": IP}).Warn("UDP sending timed out")
+		// }
 
 	}
 	log.Debug("Finished UDP algorithms")

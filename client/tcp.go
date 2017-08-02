@@ -9,7 +9,7 @@ import (
 
 func SetHeaderVal(b []byte, offset int, order binary.ByteOrder, val interface{}) *bytes.Buffer {
 	p := bytes.NewBuffer(b[:offset])
-	log.WithFields(log.Fields{"Receive time": val.(float32)}).Info("time being sent back")
+	//log.WithFields(log.Fields{"Receive time": val.(float32)}).Info("time being sent back")
 	err := binary.Write(p, order, val.(float32))
 	if err != nil {
 		log.Fatal("binary.write failed")
@@ -25,6 +25,6 @@ func ReadHeaderVal(b []byte, offset int, end_offset int, order binary.ByteOrder)
 	if err != nil {
 		log.Fatal("binary read failed")
 	}
-	log.WithFields(log.Fields{"int": ret}).Info("read header val")
+	//log.WithFields(log.Fields{"int": ret}).Info("read header val")
 	return ret
 }
