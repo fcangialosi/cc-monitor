@@ -45,6 +45,7 @@ const NUM_CYCLES = 3
 const TRANSFER_BUF_SIZE = 2048
 const PATH_TO_GENERIC_CC = "/home/ubuntu/genericCC/sender"
 const PATH_TO_REMY_CC = "/home/ubuntu/cc-monitor/rats/140-160.dna.5"
+const PATH_TO_RATS = "/home/ubuntu/cc-monitor/rats/"
 const INITIAL_X_VAL = 1000
 const FIN = "FIN"
 const ACK = "ACK"
