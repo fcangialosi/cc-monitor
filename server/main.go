@@ -61,7 +61,8 @@ func openUDPServer() {
 			alg := string(reqbuf[:n])
 
 			// for right now -> alg must be remy
-			if alg != config.REMY {
+			// alg must have remy in it
+			if alg[:4] != config.REMY {
 				log.WithFields(log.Fields{"protocol": string(reqbuf[:n])}).Info("Read non-remy alg from client on open UDP port")
 			}
 
@@ -224,6 +225,8 @@ func handleRequestTCP(conn *net.TCPConn) {
 }
 
 func runGCC(srcport string, ip string, alg string) {
+	udp_alg := "remy"
+	path := strings.Split(alg, "-")[1] // assume alg is remy-PATH_TO_RAT
 	port := config.CLIENT_UDP_PORT
 	on_time := strconv.Itoa(config.MEAN_ON_TIME_MS)
 	off_time := strconv.Itoa(0)   // have a 0 off time
@@ -233,7 +236,7 @@ func runGCC(srcport string, ip string, alg string) {
 	// Now we can start genericCC
 	// set MIN_RTT env variable
 	os.Setenv("MIN_RTT", "150")
-	switch alg {
+	switch udp_alg {
 	case "remy":
 		args := []string{
 			"serverip=" + ip,
@@ -243,7 +246,7 @@ func runGCC(srcport string, ip string, alg string) {
 			"offduration=" + off_time,
 			"cctype=remy",
 			"traffic_params=exponential,num_cycles=" + num_cycles,
-			"if=" + config.PATH_TO_REMY_CC,
+			"if=" + path,
 		}
 		// TODO remove stdout when done testing
 		cmd := exec.Command(config.PATH_TO_GENERIC_CC, args...)
