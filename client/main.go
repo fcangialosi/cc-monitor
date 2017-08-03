@@ -32,15 +32,18 @@ func elapsed(start time.Time) float32 {
 }
 
 /*Used by both Remy and TCP*/
-func singleThroughputMeasurement(t float64, bytes_received float64) float64 {
+func singleThroughputMeasurement(t float32, bytes_received uint32) float32 {
 	//log.WithFields(log.Fields{"t": t, "bytes received": bytes_received}).Warn("Time being passed into single throughout measurement function")
-	return (bytes_received * config.BYTES_TO_MBITS) / (t / 1000) // returns in Mbps
+	return (float32(bytes_received) * config.BYTES_TO_MBITS) / (t / 1000) // returns in Mbps
 }
 
 /*Measure throughput at increments*/
 func measureThroughput(start time.Time, bytes_received uint32, m results.BytesTimeMap) {
 	cur_time := elapsed(start)
-	// entire_throughput := singleThroughputMeasurement(time, bytes_received)
+	entire_throughput := singleThroughputMeasurement(cur_time, bytes_received)
+	if bytes_received < 20000 {
+		log.WithFields(log.Fields{"thr": entire_throughput, "time in program": cur_time, "bytes rec so far": bytes_received}).Info("throughput rec")
+	}
 	// m[bytes_received] = entire_throughput
 	m[bytes_received] = cur_time
 	//log.WithFields(log.Fields{"mbps": singleThroughputMeasurement(time, bytes_received)}).Info()
@@ -81,8 +84,6 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		bytes_received := uint32(0)
 
 		// start connection
-		start := time.Now()
-		flow_times[current_flow][config.START] = elapsed(original_start) // TODO: get it to be exactly time between start and original start
 		conn, err := net.Dial("tcp", server_ip+":"+config.MEASURE_SERVER_PORT)
 		CheckErrMsg(err, "tcp connection to server")
 		conn.Write([]byte(alg))
@@ -91,7 +92,9 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		if string(recvBuf[:n]) != config.START_FLOW {
 			log.Error("Did not receive start from server")
 		}
-		//log.Info("Got start")
+		// now start the timer
+		start := time.Now() // start of flow is when client sends first message to send back data
+		flow_times[current_flow][config.START] = float32(start.Sub(original_start).Seconds() * 1000)
 		conn.Write([]byte(config.ACK))
 		CheckErrMsg(err, "opening TCP connection")
 
@@ -217,7 +220,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	// for each flow, start a separate connection to the server to spawn genericCC
 	for flow := 0; flow < num_cycles; flow++ {
 		bytes_received := uint32(0)
-		shouldEcho := (alg == "remy")
+		shouldEcho := (alg[:4] == "remy")
 		recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
 
 		// create a TCP connection to get the genericCC port
@@ -263,9 +266,22 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 				break
 			}
 
+			// reset the start time to be reasonable upon seeing the -1 packet
+			if ReadHeaderVal(recvBuf, config.SEQNUM_START, config.SEQNUM_END, binary.LittleEndian) == -1 {
+				start = time.Now()
+				flow_start = float32(start.Sub(original_start).Seconds()) * 1000
+				last_received_time = flow_start
+				flow_times[flow][config.START] = flow_start
+				// need to echo the packet
+				receiver.WriteToUDP(recvBuf[:n], raddr)
+				continue
+
+			}
+
 			bytes_received += uint32(n)
 			last_received_time = elapsed(original_start)
 			measureThroughput(start, bytes_received, flow_throughputs[flow])
+
 			// echo packet with receive timestamp
 			if shouldEcho {
 				//log.Info("-----")
@@ -291,7 +307,7 @@ func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 	flow_throughputs := make([]results.BytesTimeMap, num_cycles)
 	bytes_received := uint32(0)
 	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
-	shouldEcho := (alg == "remy")
+	shouldEcho := (alg[:4] == "remy")
 	//next_measurement := float64(config.INITIAL_X_VAL)
 	flow_times := make([]results.OnOffMap, num_cycles)
 	end_flow_times := make([]float32, num_cycles+1)
@@ -678,7 +694,7 @@ func CheckErrMsg(err error, message string) {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 	// bootstrap -- ask one known server for a list of other server IP
-	if true {
+	if false {
 		mahimahi := os.Getenv("MAHIMAHI_BASE")
 		m := make(map[string][]string)
 		m["UDP"] = []string{"remy"}

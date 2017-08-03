@@ -3,7 +3,7 @@ package config
 // conversion
 const BYTES_TO_MBITS = .000008
 
-const DB_IP = "34.229.61.237"
+const DB_IP = "34.230.33.142"
 
 // DB
 const DB_NAME = "cc_test_data"
