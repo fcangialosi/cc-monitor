@@ -226,7 +226,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 
 func runGCC(srcport string, ip string, alg string) {
 	udp_alg := "remy"
-	path := config.PATH_TO_RATS + strings.Split(alg, "-")[1] // assume alg is remy-ratname at hardcoded path
+	path := config.PATH_TO_RATS + strings.Split(alg, "=")[1] // assume alg is remy-ratname at hardcoded path
 	port := config.CLIENT_UDP_PORT
 	on_time := strconv.Itoa(config.MEAN_ON_TIME_MS)
 	off_time := strconv.Itoa(0)   // have a 0 off time
