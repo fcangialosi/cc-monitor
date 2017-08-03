@@ -40,10 +40,10 @@ func singleThroughputMeasurement(t float32, bytes_received uint32) float32 {
 /*Measure throughput at increments*/
 func measureThroughput(start time.Time, bytes_received uint32, m results.BytesTimeMap) {
 	cur_time := elapsed(start)
-	entire_throughput := singleThroughputMeasurement(cur_time, bytes_received)
-	if bytes_received < 20000 {
-		log.WithFields(log.Fields{"thr": entire_throughput, "time in program": cur_time, "bytes rec so far": bytes_received}).Info("throughput rec")
-	}
+	//entire_throughput := singleThroughputMeasurement(cur_time, bytes_received)
+	// if bytes_received < 20000 {
+	// 	log.WithFields(log.Fields{"thr": entire_throughput, "time in program": cur_time, "bytes rec so far": bytes_received}).Info("throughput rec")
+	// }
 	// m[bytes_received] = entire_throughput
 	m[bytes_received] = cur_time
 	//log.WithFields(log.Fields{"mbps": singleThroughputMeasurement(time, bytes_received)}).Info()
@@ -161,15 +161,15 @@ func measureTCP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 	for {
 		n, err := conn.Read(recvBuf)
 		if err == io.EOF {
-			log.Info("Received EOF from tcp connection end")
-			log.Error(err)
+			//log.Info("Received EOF from tcp connection end")
+			//log.Error(err)
 			break // break out of function
 		}
 		if err != nil {
 			log.Error(err)
 		}
 		if n <= 0 || n >= 3 && string(recvBuf[:n]) == config.FIN {
-			log.Info("Got signal to end TCP sending")
+			//og.Info("Got signal to end TCP sending")
 			end_flow_times[current_flow+1] = last_received_time // last last recieved time
 			break
 		}
@@ -190,7 +190,7 @@ func measureTCP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 		measureThroughput(start, bytes_received, flow_throughputs[current_flow])
 
 	}
-	log.Info("Trying to send pings to end tcp measuring")
+	//log.Info("Trying to send pings to end tcp measuring")
 	end_ch <- time.Time{} // can stop sending pings
 	i := 0
 	for i < num_cycles {
@@ -231,7 +231,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		n, err := conn.Read(recvBuf)
 		CheckErrMsg(err, "Trying to receive port number from genericCC")
 		gccPort := string(recvBuf[:n])
-		log.WithFields(log.Fields{"port": gccPort}).Info("Received port number genericCC will be running on")
+		//log.WithFields(log.Fields{"port": gccPort}).Info("Received port number genericCC will be running on")
 
 		// create UDP listening port
 		laddr, err := net.ResolveUDPAddr("udp", ":"+config.CLIENT_UDP_PORT) // listen at a known port for later udp messages
@@ -246,7 +246,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		// punch hole in NAT for genericCC
 		_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
 		CheckErrMsg(err, "Punching NAT for genericCC")
-		log.Info("Open Sesame!")
+		//log.Info("Open Sesame!")
 
 		// write ACK to server to server can start genericCC
 		conn.Write([]byte(config.ACK))
@@ -293,7 +293,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		}
 
 		// close the connection to the TCP server and listening on UDP port
-		log.Info("Ending connection and putting in timestamps")
+		//log.Info("Ending connection and putting in timestamps")
 		flow_times[flow][config.END] = last_received_time
 		conn.Close()
 		receiver.Close()
@@ -332,7 +332,7 @@ func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 	n, err := conn.Read(recvBuf)
 	CheckErrMsg(err, "Trying to receive port number from genericCC")
 	gccPort := string(recvBuf[:n])
-	log.WithFields(log.Fields{"port": gccPort}).Info("Received port number genericCC will be running on")
+	//log.WithFields(log.Fields{"port": gccPort}).Info("Received port number genericCC will be running on")
 
 	// create UDP listening port
 	laddr, err := net.ResolveUDPAddr("udp", ":"+config.CLIENT_UDP_PORT) // listen at a known port for later udp messages
@@ -350,7 +350,7 @@ func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 	if err != nil {
 		log.Panic(err)
 	}
-	log.Info("Wrote open sesame")
+	//log.Info("Wrote open sesame")
 
 	// write ACK to the server so server can start genericCC
 	conn.Write([]byte(config.ACK))
@@ -385,23 +385,23 @@ func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 			}
 		}
 		if string(recvBuf[:config.FIN_LEN]) == config.FIN {
-			log.Info("Received FIN")
+			//log.Info("Received FIN")
 			end_flow_times[current_flow+1] = last_received_time // last end flow time
 			break
 		}
 		if ReadHeaderVal(recvBuf, config.SEQNUM_START, config.SEQNUM_END, binary.LittleEndian) == -1 {
 			//if string(recvBuf[:config.START_FLOW_LEN]) == config.START_FLOW {
-			log.Info("Received start flow, incrementing current flow")
+			//log.Info("Received start flow, incrementing current flow")
 			if started_flow {
 				current_flow++
 			} else {
 				started_flow = true
 			}
-			log.WithFields(log.Fields{"current flow": current_flow}).Info("boohoo")
+			//log.WithFields(log.Fields{"current flow": current_flow}).Info("boohoo")
 
 			flow_times[current_flow][config.START] = elapsed(original_start)
 			end_flow_times[current_flow] = last_received_time
-			log.WithFields(log.Fields{"last received": last_received_time, "current": elapsed(original_start)}).Info("Received START FLOW GOTTA START A NEW ONE")
+			//log.WithFields(log.Fields{"last received": last_received_time, "current": elapsed(original_start)}).Info("Received START FLOW GOTTA START A NEW ONE")
 			bytes_received = 0
 			//next_measurement = 1000 // reset to 1KB
 			start = time.Now()
@@ -423,9 +423,9 @@ func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 			receiver.WriteToUDP(echo.Bytes(), raddr)
 		}
 	}
-	log.Info("Trying to end signal to stop sending pings channel")
+	//log.Info("Trying to end signal to stop sending pings channel")
 	end_ch <- time.Time{} // can stop sending pings
-	log.Info("Returning from the UDP thing")
+	//log.Info("Returning from the UDP thing")
 	i := 0
 	for i < num_cycles {
 		flow_times[i][config.END] = end_flow_times[i+1]
@@ -436,7 +436,7 @@ func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 
 /*Starts a ping chain - stops when the other goroutine sends a message over a channel*/
 func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time, protocol string, port string) results.TimeRTTMap {
-	log.Info("entering the send ping function")
+	//log.Info("entering the send ping function")
 	rtt_dict := results.TimeRTTMap{}
 	pingBuf := make([]byte, config.PING_SIZE_BYTES)
 	if protocol == config.UDP {
@@ -450,14 +450,14 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 		var mutex = &sync.Mutex{}
 
 		// wait for measurement to start
-		log.Info("waiting to receive go in ping function")
+		//log.Info("waiting to receive go in ping function")
 		start := <-start_ch
-		log.Info("Got start to send pings")
+		//log.Info("Got start to send pings")
 	sendloop:
 		for {
 			select {
 			case <-end_ch:
-				log.Warn("Got signal to end pings")
+				//log.Warn("Got signal to end pings")
 				break sendloop
 			default:
 				go func(m results.TimeRTTMap) {
@@ -488,14 +488,14 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 		defer conn.Close()
 
 		start := <-start_ch // wait for start
-		log.WithFields(log.Fields{"original start": start}).Info("TCP ping times")
+		//log.WithFields(log.Fields{"original start": start}).Info("TCP ping times")
 
 		i := 0
 	sendloop_tcp:
 		for {
 			select {
 			case <-end_ch:
-				log.Debug("Got signal to end pings")
+				//log.Debug("Got signal to end pings")
 				break sendloop_tcp
 			default:
 				recvBuf := make([]byte, config.PING_SIZE_BYTES)
@@ -557,7 +557,7 @@ func sendReport(report []byte) {
 	CheckError(err)
 	defer conn.Close()
 	conn.Write(report)
-	log.WithFields(log.Fields{"size": len(report)}).Info("Sending size bytes in chunks")
+	//log.WithFields(log.Fields{"size": len(report)}).Info("Sending size bytes in chunks")
 	conn.Write(report)
 	// bytes_written := 0
 	// for bytes_written < len(report) {
@@ -598,9 +598,9 @@ func getIPS() (results.IPList, int) {
 	CheckError(err)
 	ip_list, num_cycles := results.DecodeIPList(recv_buf[:n])
 
-	for key, val := range ip_list {
-		log.WithFields(log.Fields{"IP": key, "alg map": val, "num_cycles": num_cycles}).Info("IP")
-	}
+	// for key, val := range ip_list {
+	// 	log.WithFields(log.Fields{"IP": key, "alg map": val, "num_cycles": num_cycles}).Info("IP")
+	// }
 	return ip_list, num_cycles
 
 }
@@ -633,29 +633,29 @@ func runExperimentOnMachine(IP string, alg_map map[string][]string, num_cycles i
 		FlowTimes:  make(map[string][]results.OnOffMap)}
 
 	for _, alg := range tcp_algorithms {
-		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
+		//log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
 		runExperiment(measureTCP2, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, num_cycles)
-		for ind, val := range report.Throughput[alg] {
-			log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
-			log.WithFields(log.Fields{"throughput dict": val}).Info("Dict")
-		}
-		for ind, val := range report.FlowTimes[alg] {
-			log.WithFields(log.Fields{"flow number": ind, "flow start": val[config.START], "flow end": val[config.END]}).Info("Flow times")
-		}
-		for key, val := range report.Delay[alg] {
-			log.WithFields(log.Fields{"time sent": key, "rtt": val, "alg": alg}).Info("Ping Times")
-		}
+		// for ind, val := range report.Throughput[alg] {
+		// 	log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
+		// 	log.WithFields(log.Fields{"throughput dict": val}).Info("Dict")
+		// }
+		// for ind, val := range report.FlowTimes[alg] {
+		// 	log.WithFields(log.Fields{"flow number": ind, "flow start": val[config.START], "flow end": val[config.END]}).Info("Flow times")
+		// }
+		// for key, val := range report.Delay[alg] {
+		// 	log.WithFields(log.Fields{"time sent": key, "rtt": val, "alg": alg}).Info("Ping Times")
+		// }
 	}
-	log.Debug("Finished TCP algorithms")
+	//log.Debug("Finished TCP algorithms")
 	for _, alg := range udp_algorithms {
-		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
+		//log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
 		runExperiment(measureUDP2, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, num_cycles)
-		for ind, val := range report.FlowTimes[alg] {
-			log.WithFields(log.Fields{"flow number": ind, "flow start": val[config.START], "flow end": val[config.END]}).Info("Flow times")
-		}
-		for ind, val := range report.Throughput[alg] {
-			log.WithFields(log.Fields{"flow number": ind, "length of throughput dict": len(val)}).Info("throughput info")
-		}
+		// for ind, val := range report.FlowTimes[alg] {
+		// 	log.WithFields(log.Fields{"flow number": ind, "flow start": val[config.START], "flow end": val[config.END]}).Info("Flow times")
+		// }
+		// for ind, val := range report.Throughput[alg] {
+		// 	log.WithFields(log.Fields{"flow number": ind, "length of throughput dict": len(val)}).Info("throughput info")
+		// }
 		// if !timed_out {
 		// 	for ind, val := range report.Throughput[alg] {
 		// 		log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
@@ -672,17 +672,14 @@ func runExperimentOnMachine(IP string, alg_map map[string][]string, num_cycles i
 		// }
 
 	}
-	log.Debug("Finished UDP algorithms")
+	//log.Debug("Finished UDP algorithms")
 
 	// print out the TCP results and the UDP results
 
-	log.Info("all experiments finished")
 	// print the reports
 
-	log.Info("sending report")
+	//log.Info("sending report")
 	sendReport(results.EncodeCCResults(&report))
-	log.Info("done")
-
 }
 
 func CheckErrMsg(err error, message string) {
@@ -702,8 +699,11 @@ func main() {
 		runExperimentOnMachine(mahimahi, m, config.NUM_CYCLES)
 	} else {
 		ip_map, num_cycles := getIPS()
+		log.Info("This script will contact different servers to transfer data using different congestion control algorithms, and records data about the performance of each algorithm. It may take around 15-30 minutes.")
 		for IP, val := range ip_map {
 			runExperimentOnMachine(IP, val, num_cycles)
 		}
 	}
+
+	log.Info("All experiments finished! Thanks for helping us with our congestion control research.")
 }
