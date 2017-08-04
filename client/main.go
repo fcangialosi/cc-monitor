@@ -5,7 +5,6 @@ import (
 	"io"
 	"net"
 	"os"
-	//"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -225,18 +224,23 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 		// create a TCP connection to get the genericCC port
 		conn, err := net.Dial("tcp", server_ip+":"+config.OPEN_UDP_PORT)
+		defer conn.Close()
 		CheckErrMsg(err, "Open TCP connection to get genericCC port number")
-		conn.Write([]byte(alg)) // write remy
+		// create UDP listening port
+		srcport := strconv.Itoa((9876 - flow))
+		conn.Write([]byte(alg + "->" + srcport)) // write remy
+		log.WithFields(log.Fields{"port": srcport}).Info("Listening on src port")
 
 		n, err := conn.Read(recvBuf)
 		CheckErrMsg(err, "Trying to receive port number from genericCC")
 		gccPort := string(recvBuf[:n])
-		//log.WithFields(log.Fields{"port": gccPort}).Info("Received port number genericCC will be running on")
+		log.WithFields(log.Fields{"port": gccPort}).Info("Received port number genericCC will be running on")
 
-		// create UDP listening port
-		laddr, err := net.ResolveUDPAddr("udp", ":"+config.CLIENT_UDP_PORT) // listen at a known port for later udp messages
+		laddr, err := net.ResolveUDPAddr("udp", ":"+srcport) // listen at a known port for later udp messages
 		CheckErrMsg(err, "creating laddr")
 		receiver, err := net.ListenUDP("udp", laddr)
+		defer receiver.Close()
+
 		CheckErrMsg(err, "error on creating receiver for listen UDP")
 
 		// start listening for genericCC
@@ -245,8 +249,10 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 		// punch hole in NAT for genericCC
 		_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
+		_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
+		_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
 		CheckErrMsg(err, "Punching NAT for genericCC")
-		//log.Info("Open Sesame!")
+		log.Info("Open Sesame!: ", gccAddr)
 
 		// write ACK to server to server can start genericCC
 		conn.Write([]byte(config.ACK))
@@ -255,10 +261,16 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		flow_start := float32(start.Sub(original_start).Seconds() * 1000)
 		last_received_time := flow_start
 		flow_times[flow][config.START] = flow_start
-
+		started_flow := false
 		for {
-			receiver.SetReadDeadline(time.Now().Add(config.CLIENT_TIMEOUT * time.Second)) // long timeout
+			timeout := config.CLIENT_TIMEOUT * time.Second
+			if !started_flow {
+				timeout = config.MINUTE_TIMEOUT * time.Second
+			}
+			receiver.SetReadDeadline(time.Now().Add(timeout)) // long timeout
+			log.Info("Waiting to read back on the socket")
 			n, raddr, err := receiver.ReadFromUDP(recvBuf)
+			log.Info("read on the socket")
 
 			if err, ok := err.(net.Error); ok && err.Timeout() {
 				break
@@ -266,16 +278,9 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 				break
 			}
 
-			// reset the start time to be reasonable upon seeing the -1 packet
 			if ReadHeaderVal(recvBuf, config.SEQNUM_START, config.SEQNUM_END, binary.LittleEndian) == -1 {
-				start = time.Now()
-				flow_start = float32(start.Sub(original_start).Seconds()) * 1000
-				last_received_time = flow_start
-				flow_times[flow][config.START] = flow_start
-				// need to echo the packet
-				receiver.WriteToUDP(recvBuf[:n], raddr)
-				continue
-
+				log.Info("Read start flow packet")
+				started_flow = true
 			}
 
 			bytes_received += uint32(n)
@@ -284,7 +289,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 			// echo packet with receive timestamp
 			if shouldEcho {
-				//log.Info("-----")
+				log.Info("echo packet")
 				echo := SetHeaderVal(recvBuf[:n], config.RECEIVE_TIMESTAMP_START, binary.LittleEndian, elapsed(start))
 				// TODO can just send back the recvbuf
 				receiver.WriteToUDP(echo.Bytes(), raddr)
@@ -293,10 +298,8 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		}
 
 		// close the connection to the TCP server and listening on UDP port
-		//log.Info("Ending connection and putting in timestamps")
+		log.Info("Ending connection and putting in timestamps")
 		flow_times[flow][config.END] = last_received_time
-		conn.Close()
-		receiver.Close()
 	}
 	end_ch <- time.Time{} // can stop sending pings
 	return flow_throughputs, flow_times, timed_out
@@ -691,10 +694,10 @@ func CheckErrMsg(err error, message string) {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 	// bootstrap -- ask one known server for a list of other server IP
-	if false {
+	if true {
 		mahimahi := os.Getenv("MAHIMAHI_BASE")
 		m := make(map[string][]string)
-		m["UDP"] = []string{"remy"}
+		m["UDP"] = []string{"remy=bigbertha-100x.dna.5"}
 		m["TCP"] = []string{}
 		runExperimentOnMachine(mahimahi, m, config.NUM_CYCLES)
 	} else {

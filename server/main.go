@@ -225,10 +225,13 @@ func handleRequestTCP(conn *net.TCPConn) {
 }
 
 func runGCC(srcport string, ip string, alg string) {
+	log.Info(alg)
 	udp_alg := "remy"
-	path := config.PATH_TO_RATS + strings.Split(alg, "=")[1] // assume alg is remy-ratname at hardcoded path
-	port := config.CLIENT_UDP_PORT
-	on_time := strconv.Itoa(config.MEAN_ON_TIME_MS)
+	alg_path := strings.Split(alg, "->")[0]
+	port := strings.Split(alg, "->")[1]                           // assume "remy=pathname->clientport"
+	path := config.PATH_TO_RATS + strings.Split(alg_path, "=")[1] // assume alg is remy-ratname at hardcoded path
+	log.Info(port)
+	on_time := strconv.Itoa(config.MEAN_ON_TIME)
 	off_time := strconv.Itoa(0)   // have a 0 off time
 	num_cycles := strconv.Itoa(1) // send for 1 on and off period
 	log.WithFields(log.Fields{"num cycles": num_cycles}).Info("num cycles")

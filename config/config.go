@@ -43,7 +43,7 @@ const MIN_ON_TIME = 1000 // atleast send for one second
 const MIN_OFF_TIME = 500
 const NUM_CYCLES = 3
 const TRANSFER_BUF_SIZE = 2048
-const PATH_TO_GENERIC_CC = "/home/ubuntu/genericCC/sender"
+const PATH_TO_GENERIC_CC = "/home/ubuntu/dr_genericCC/sender"
 const PATH_TO_REMY_CC = "/home/ubuntu/cc-monitor/rats/140-160.dna.5"
 const PATH_TO_RATS = "/home/ubuntu/cc-monitor/rats/"
 const INITIAL_X_VAL = 1000
@@ -70,3 +70,4 @@ const UDP = "udp"
 // timeout for reading
 const CLIENT_TIMEOUT = 10 // 10 seconds before the client times out
 const TCP_TIMEOUT = 2     // 1 second to try to get data
+const MINUTE_TIMEOUT = 60
