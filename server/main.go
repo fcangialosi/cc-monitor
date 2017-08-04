@@ -231,7 +231,7 @@ func runGCC(srcport string, ip string, alg string) {
 	port := strings.Split(alg, "->")[1]                           // assume "remy=pathname->clientport"
 	path := config.PATH_TO_RATS + strings.Split(alg_path, "=")[1] // assume alg is remy-ratname at hardcoded path
 	log.Info(port)
-	on_time := strconv.Itoa(config.MEAN_ON_TIME)
+	on_time := strconv.Itoa(config.MEAN_ON_TIME_MS)
 	off_time := strconv.Itoa(0)   // have a 0 off time
 	num_cycles := strconv.Itoa(1) // send for 1 on and off period
 	log.WithFields(log.Fields{"num cycles": num_cycles}).Info("num cycles")
