@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -618,7 +619,7 @@ func GetOutboundIP() string {
 	return localAddr[0:idx]
 }
 
-func runExperimentOnMachine(IP string, alg_map map[string][]string, num_cycles int) {
+func runExperimentOnMachine(IP string, alg_map map[string][]string, num_cycles int) string {
 
 	// runs the experiment on the given machine, and uploads the results to the DB server
 	// addresses and algorithms to test
@@ -682,10 +683,19 @@ func runExperimentOnMachine(IP string, alg_map map[string][]string, num_cycles i
 	// print the reports
 
 	//log.Info("sending report")
+	// add in the current time and send in the report
+	sendTime := currentTime()
+	report.SendTime = sendTime
 	sendReport(results.EncodeCCResults(&report))
+	return sendTime
 }
 
-func CheckErrMsg(err error, message string) {
+func currentTime() string {
+	hour, min, sec := time.Now().Clock()
+	return fmt.Sprintf("%d.%d.%d", hour, min, sec)
+}
+
+func CheckErrMsg(err error, message string) { // check error
 	if err != nil {
 		log.WithFields(log.Fields{"msg": message}).Fatal(err)
 	}
@@ -694,7 +704,7 @@ func CheckErrMsg(err error, message string) {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 	// bootstrap -- ask one known server for a list of other server IP
-	if true {
+	if false {
 		mahimahi := os.Getenv("MAHIMAHI_BASE")
 		m := make(map[string][]string)
 		m["UDP"] = []string{"remy=bigbertha-100x.dna.5"}
@@ -702,10 +712,17 @@ func main() {
 		runExperimentOnMachine(mahimahi, m, config.NUM_CYCLES)
 	} else {
 		ip_map, num_cycles := getIPS()
+		sendMap := make(map[string]string) // maps IPs to times the report was sent
 		log.Info("This script will contact different servers to transfer data using different congestion control algorithms, and records data about the performance of each algorithm. It may take around 15-30 minutes.")
+		count := 1
 		for IP, val := range ip_map {
-			runExperimentOnMachine(IP, val, num_cycles)
+			log.Info("Contacting server # ", count)
+			sendTime := runExperimentOnMachine(IP, val, num_cycles)
+			sendMap[IP] = sendTime
+			count++
 		}
+
+		// now ask the server for the link to the graph
 	}
 
 	log.Info("All experiments finished! Thanks for helping us with our congestion control research.")

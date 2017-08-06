@@ -19,6 +19,7 @@ type CCResults struct {
 	Throughput map[string]([]BytesTimeMap)
 	Delay      map[string]TimeRTTMap
 	FlowTimes  map[string][]OnOffMap // list of times when the flows "on" started
+	SendTime   string                // string of when client sent this result to the DB
 }
 
 /* This struct is different because it contains the results for an individual algorithm*/
@@ -90,6 +91,7 @@ func EncodeCCResults(cc *CCResults) []byte {
 	e.Encode(cc.Throughput)
 	e.Encode(cc.Delay)
 	e.Encode(cc.FlowTimes)
+	e.Encode(cc.SendTime)
 	return w.Bytes()
 }
 
@@ -105,6 +107,7 @@ func DecodeCCResults(data []byte) CCResults {
 	d.Decode(&results.Throughput)
 	d.Decode(&results.Delay)
 	d.Decode(&results.FlowTimes)
+	d.Decode(&results.SendTime)
 	return results
 }
 
