@@ -27,6 +27,7 @@ const DB_SERVER_PORT = "10103"
 const IP_SERVER_PORT = "10104"
 const MAX_PORT = 65535
 const OPEN_UDP_PORT = "10105"
+const DB_GRAPH_PORT = "10105"
 const CLIENT_UDP_PORT = "9876"
 
 // Ping server constants

@@ -13,6 +13,10 @@ type TimeRTTMap map[float32]float32
 type OnOffMap map[string]float32
 
 type IPList map[string](map[string][]string)
+type GraphInfo struct { // info about the server and time sent to get the correct graph URL
+	ServerIP string
+	SendTime string
+}
 type CCResults struct {
 	ServerIP   string
 	ClientIP   string
@@ -31,6 +35,26 @@ type DBResult struct {
 	Throughput []BytesTimeMap
 	Delay      TimeRTTMap
 	FlowTimes  []OnOffMap
+}
+
+func EncodeGraphInfo(gg *GraphInfo) []byte {
+	w := new(bytes.Buffer)
+	e := gob.NewEncoder(w)
+	e.Encode(gg.ServerIP)
+	e.Encode(gg.SendTime)
+	return w.Bytes()
+}
+
+func DecodeGraphInfo(data []byte) GraphInfo {
+	results := GraphInfo{}
+	r := bytes.NewBuffer(data)
+	if data == nil || len(data) < 1 {
+		log.Error("error decoding into GraphInfo struct")
+	}
+	d := gob.NewDecoder(r)
+	d.Decode(&results.ServerIP)
+	d.Decode(&results.SendTime)
+	return results
 }
 
 func EncodeIPList(list IPList, num_cycles int) []byte {
