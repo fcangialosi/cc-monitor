@@ -230,12 +230,12 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		// create UDP listening port
 		srcport := strconv.Itoa((9876 - flow))
 		conn.Write([]byte(alg + "->" + srcport)) // write remy
-		log.WithFields(log.Fields{"port": srcport}).Info("Listening on src port")
+		//log.WithFields(log.Fields{"port": srcport}).Info("Listening on src port")
 
 		n, err := conn.Read(recvBuf)
 		CheckErrMsg(err, "Trying to receive port number from genericCC")
 		gccPort := string(recvBuf[:n])
-		log.WithFields(log.Fields{"port": gccPort}).Info("Received port number genericCC will be running on")
+		//log.WithFields(log.Fields{"port": gccPort}).Info("Received port number genericCC will be running on")
 
 		laddr, err := net.ResolveUDPAddr("udp", ":"+srcport) // listen at a known port for later udp messages
 		CheckErrMsg(err, "creating laddr")
@@ -252,7 +252,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
 		_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
 		CheckErrMsg(err, "Punching NAT for genericCC")
-		log.Info("Open Sesame!: ", gccAddr)
+		//log.Info("Open Sesame!: ", gccAddr)
 
 		// write ACK to server to server can start genericCC
 		conn.Write([]byte(config.ACK))
@@ -300,7 +300,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		// close the connection to the TCP server and listening on UDP port
 		conn.Close()
 		receiver.Close()
-		log.Info("Ending connection and putting in timestamps")
+		//log.Info("Ending connection and putting in timestamps")
 		flow_times[flow][config.END] = last_received_time
 	}
 	end_ch <- time.Time{} // can stop sending pings
@@ -726,7 +726,7 @@ func main() {
 	} else {
 		ip_map, num_cycles := getIPS()
 		sendMap := make(map[string]string) // maps IPs to times the report was sent
-		log.Info("This script will contact different servers to transfer data using different congestion control algorithms, and records data about the performance of each algorithm. It may take around 15-30 minutes.")
+		log.Info("This script will contact different servers to transfer data using different congestion control algorithms, and records data about the performance of each algorithm. It may take around 10 minutes. We're trying to guage the performance of an algorithm designed by Remy, a program that automatically generates congestion control algorithms based on input parameters.")
 		count := 1
 		for IP, val := range ip_map {
 			log.Info("Contacting server # ", count)
@@ -736,7 +736,7 @@ func main() {
 		}
 
 		// now ask the server for the link to the graph
-		log.Info("We will now provide the graphs generated from the experiments. They might not load immediately.")
+		log.Info("We will now give links to the graphs summarizing the experiment. They might not load immediately.")
 		count = 1
 		for IP, time := range sendMap {
 			info := results.GraphInfo{ServerIP: IP, SendTime: time}
