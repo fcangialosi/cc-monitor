@@ -196,10 +196,10 @@ func handleRequestTCP(conn *net.TCPConn) {
 		syscall.SetsockoptString(int(file.Fd()), syscall.IPPROTO_TCP, config.TCP_CONGESTION, req)
 
 		// generate on/off distributions
-		prng := getNewPRNG()
-		on_dist := createExpDist(config.MEAN_ON_TIME_MS, prng)
-
-		on_time := time.Millisecond * time.Duration(on_dist.Sample()+config.MEAN_ON_TIME_MS)
+		//prng := getNewPRNG()
+		//on_dist := createExpDist(config.MEAN_ON_TIME_MS, prng)
+		//on_time := time.Millisecond * time.Duration(on_dist.Sample()+config.MEAN_ON_TIME_MS)
+		on_time := time.Millisecond * config.MEAN_ON_TIME_MS
 		// on - send start flow message
 		log.WithFields(log.Fields{"on": on_time}).Info("new on for tcp")
 		conn.Write(startBuf)
@@ -248,7 +248,7 @@ func runGCC(srcport string, ip string, alg string) {
 			"onduration=" + on_time,
 			"offduration=" + off_time,
 			"cctype=remy",
-			"traffic_params=exponential,num_cycles=" + num_cycles,
+			"traffic_params=deterministic,num_cycles=" + num_cycles,
 			"if=" + path,
 		}
 		// TODO remove stdout when done testing
