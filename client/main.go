@@ -225,7 +225,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 		// create a TCP connection to get the genericCC port
 		conn, err := net.Dial("tcp", server_ip+":"+config.OPEN_UDP_PORT)
-		defer conn.Close()
+
 		CheckErrMsg(err, "Open TCP connection to get genericCC port number")
 		// create UDP listening port
 		srcport := strconv.Itoa((9876 - flow))
@@ -240,7 +240,6 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		laddr, err := net.ResolveUDPAddr("udp", ":"+srcport) // listen at a known port for later udp messages
 		CheckErrMsg(err, "creating laddr")
 		receiver, err := net.ListenUDP("udp", laddr)
-		defer receiver.Close()
 
 		CheckErrMsg(err, "error on creating receiver for listen UDP")
 
@@ -269,9 +268,9 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 				timeout = config.MINUTE_TIMEOUT * time.Second
 			}
 			receiver.SetReadDeadline(time.Now().Add(timeout)) // long timeout
-			log.Info("Waiting to read back on the socket")
+			//log.Info("Waiting to read back on the socket")
 			n, raddr, err := receiver.ReadFromUDP(recvBuf)
-			log.Info("read on the socket")
+			//log.Info("read on the socket")
 
 			if err, ok := err.(net.Error); ok && err.Timeout() {
 				break
@@ -280,7 +279,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 			}
 
 			if ReadHeaderVal(recvBuf, config.SEQNUM_START, config.SEQNUM_END, binary.LittleEndian) == -1 {
-				log.Info("Read start flow packet")
+				//log.Info("Read start flow packet")
 				started_flow = true
 			}
 
@@ -290,7 +289,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 			// echo packet with receive timestamp
 			if shouldEcho {
-				log.Info("echo packet")
+				//log.Info("echo packet")
 				echo := SetHeaderVal(recvBuf[:n], config.RECEIVE_TIMESTAMP_START, binary.LittleEndian, elapsed(start))
 				// TODO can just send back the recvbuf
 				receiver.WriteToUDP(echo.Bytes(), raddr)
@@ -299,6 +298,8 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		}
 
 		// close the connection to the TCP server and listening on UDP port
+		conn.Close()
+		receiver.Close()
 		log.Info("Ending connection and putting in timestamps")
 		flow_times[flow][config.END] = last_received_time
 	}
@@ -562,7 +563,6 @@ func sendReport(report []byte) {
 	defer conn.Close()
 	conn.Write(report)
 	//log.WithFields(log.Fields{"size": len(report)}).Info("Sending size bytes in chunks")
-	conn.Write(report)
 	// bytes_written := 0
 	// for bytes_written < len(report) {
 	// 	if bytes_written+LARGE_BUF_SIZE >= len(report) {
@@ -637,7 +637,7 @@ func runExperimentOnMachine(IP string, alg_map map[string][]string, num_cycles i
 		FlowTimes:  make(map[string][]results.OnOffMap)}
 
 	for _, alg := range tcp_algorithms {
-		//log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
+		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
 		runExperiment(measureTCP2, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, num_cycles)
 		// for ind, val := range report.Throughput[alg] {
 		// 	log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
@@ -652,7 +652,7 @@ func runExperimentOnMachine(IP string, alg_map map[string][]string, num_cycles i
 	}
 	//log.Debug("Finished TCP algorithms")
 	for _, alg := range udp_algorithms {
-		//log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
+		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
 		runExperiment(measureUDP2, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, num_cycles)
 		// for ind, val := range report.FlowTimes[alg] {
 		// 	log.WithFields(log.Fields{"flow number": ind, "flow start": val[config.START], "flow end": val[config.END]}).Info("Flow times")
@@ -686,6 +686,7 @@ func runExperimentOnMachine(IP string, alg_map map[string][]string, num_cycles i
 	// add in the current time and send in the report
 	sendTime := currentTime()
 	report.SendTime = sendTime
+	log.Info("Sending report to server")
 	sendReport(results.EncodeCCResults(&report))
 	return sendTime
 }
@@ -699,6 +700,18 @@ func CheckErrMsg(err error, message string) { // check error
 	if err != nil {
 		log.WithFields(log.Fields{"msg": message}).Fatal(err)
 	}
+}
+
+func getURLFromServer(gg results.GraphInfo) string {
+	conn, err := net.Dial("tcp", config.DB_IP+":"+config.DB_GRAPH_PORT)
+	CheckError(err)
+	defer conn.Close()
+	conn.Write(results.EncodeGraphInfo(&gg))
+	recvBuf := make([]byte, 2048)
+	// now wait for the url
+	n, _ := conn.Read(recvBuf)
+	return string(recvBuf[:n])
+
 }
 
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
@@ -723,6 +736,15 @@ func main() {
 		}
 
 		// now ask the server for the link to the graph
+		log.Info("We will now provide the graphs generated from the experiments. They might not load immediately.")
+		count = 1
+		for IP, time := range sendMap {
+			info := results.GraphInfo{ServerIP: IP, SendTime: time}
+			url := getURLFromServer(info)
+			result := fmt.Sprintf("View result # %d at %s\n", count, url)
+			log.Info(result)
+			count++
+		}
 	}
 
 	log.Info("All experiments finished! Thanks for helping us with our congestion control research.")
