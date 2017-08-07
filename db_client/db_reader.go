@@ -81,7 +81,10 @@ func parseLogs(cc *results.CCResults, file_size uint32, outfile string, w *bufio
 
 
   for alg, thr := range cc.Throughput {
-    //log.WithFields(log.Fields{"alg": alg}).Info("result")
+    log.WithFields(log.Fields{"alg": alg}).Info("result")
+    if alg[:4] == "remy" {
+      log.WithFields(log.Fields{"len of dictionary": len(thr), "dict": thr}).Info("ugh")
+    }
     // right now - start with one flow -> get average throughput for everytime
     flow_tot_del := float32(0)
     flow_num_valid := 0
@@ -109,7 +112,7 @@ func parseLogs(cc *results.CCResults, file_size uint32, outfile string, w *bufio
             //log.WithFields(log.Fields{"file_size": file_size, "time": file_time, "flow": flow, "alg": alg}).Info("got to filesize")
             // get average delay until this time
             avg_delay := getAvgDelayUntil(cc.FlowTimes[alg][flow], cc.Delay[alg], file_time)
-            //log.WithFields(log.Fields{"file_size": file_size, "thr": thr_measurement, "avg_delay": avg_delay, "alg": alg, "flow": flow}).Info("Thr, delay pt")
+            log.WithFields(log.Fields{"file_size": file_size, "thr": thr_measurement, "avg_delay": avg_delay, "alg": alg, "flow": flow}).Info("Thr, delay pt")
           if avg_delay != 0 {
             flow_num_valid ++
             flow_tot_del += avg_delay

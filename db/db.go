@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
+  "os/exec"
 	"../config"
 	"../results"
 	log "github.com/sirupsen/logrus"
@@ -126,7 +126,7 @@ func dbServer(ch chan results.CCResults) {
 			log.Warning(err)
 		}
 		go func(c *net.TCPConn) {
-			defer conn.Close()
+			defer c.Close()
 			p := make([]byte, 15000) // large buf size
 			report_bytes := make([]byte, 0)
 			// read until client sends EOF
@@ -161,7 +161,7 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 			server_ip := report.ServerIP
 			client_ip := strings.Split(report.ClientIP, ":")[0]
 			current_date := currentDate()
-			current_time := currentTime()
+			current_time := report.SendTime // client will later ask for where the graph is
 
 			// check if everything exists
 			server_file := fmt.Sprintf("%s_logs", server_ip)
@@ -186,9 +186,70 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 			checkErrMsg(err, "marshalling report into bytes")
 			_, err = f.Write(b)
 			checkErrMsg(err, "writing bytes to file")
+
+
+      // make the graph -> name it according to the time and location
+      graph_title := fmt.Sprintf("Transfer to %s AWS", location)
+      graph_location := fmt.Sprintf("%s_%s", current_time, location)
+      graph_directory := fmt.Sprintf("%s/%s/%s", config.PATH_TO_GRAPH_RESULTS, server_file, current_date)
+      err = os.MkdirAll(graph_directory, 0777)
+			if err != nil {
+				log.WithFields(log.Fields{"err": err, "path": path}).Panic("Creating graph path to store results")
+			}
+
+      args := []string{full_path, graph_location, graph_title, graph_directory}
+      cmd := exec.Command(config.PATH_TO_GRAPH_SCRIPT, args...) // graphing scripts  moves the image to file with the python web server running
+      cmd.Stdout = os.Stdout
+      if err = cmd.Run(); err != nil {
+        log.Info("Error in running graphing script")
+        log.Error(err)
+      }
 		}(report)
 
 	}
+}
+
+func getGraphInfo(ip_file string) {
+	log.Info("In get graph info server function")
+	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.DB_GRAPH_PORT)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	server, err := net.ListenTCP("tcp", laddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for {
+		conn, err := server.AcceptTCP()
+		log.Info("Got a report to read from the client")
+		if err != nil {
+			log.Warning(err)
+		}
+		go func(c *net.TCPConn) {
+      // decode the graph info and client IP, and from that construct the graph:w
+			defer c.Close()
+			p := make([]byte, 2048) // large buf size
+		  n, err := conn.Read(p)
+      checkErrMsg(err, "reading URL prefix string")
+      report := results.DecodeGraphInfo(p[:n])
+      server_ip := report.ServerIP
+      server_file := fmt.Sprintf("%s_logs", server_ip)
+      current_time := report.SendTime
+      current_date := currentDate()
+
+			location := getIPLocation(ip_file, server_ip)
+			if location != "NOT_FOUND" {
+				server_file = fmt.Sprintf("%s_logs", location)
+			}
+			filename := fmt.Sprintf("%s_%s.png", current_time, location)
+			path := fmt.Sprintf("%s/%s", server_file, current_date)
+      // find the correct URL and return
+      URL := config.URL_PREFIX + "/" + path + "/" + filename
+      conn.Write([]byte(URL))
+    }(conn)
+  }
 }
 
 func currentDate() string {
@@ -232,6 +293,7 @@ func main() {
 	db_channel := make(chan results.CCResults)
 	go dbServer(db_channel)
 	go dbWorker(db_channel, config.IP_LIST_LOCATION)
+  go getGraphInfo(config.IP_LIST_LOCATION)
 	<-quit
 
 }
