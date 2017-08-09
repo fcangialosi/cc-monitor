@@ -35,6 +35,7 @@ const PING_SIZE_BYTES = 1492
 
 // Measure server constants
 const LARGE_BUF_SIZE = 4096
+const TCP_BUF_SIZE = 4096
 const TCP_TRANSFER_SIZE = 200000
 const MAX_REQ_SIZE = 128
 const TCP_CONGESTION = 0xd
