@@ -47,6 +47,7 @@ const NUM_CYCLES = 3
 const TRANSFER_BUF_SIZE = 2048
 const URL_PREFIX = "http://34.230.33.142:8000"
 const PATH_TO_GRAPH_SCRIPT = "/home/ubuntu/monitor_plots/graph_transfer_data.sh"
+const PATH_TO_GRAPH_THROUGHPUT_SCRIPT = "/home/ubuntu/monitor_plots/graph_throughput.sh"
 const PATH_TO_GRAPH_RESULTS = "/home/ubuntu/exp_results"
 const PATH_TO_GENERIC_CC = "/home/ubuntu/genericCC/sender"
 const PATH_TO_REMY_CC = "/home/ubuntu/cc-monitor/rats/140-160.dna.5"
