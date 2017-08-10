@@ -17,10 +17,11 @@ import (
 )
 
 /*Simple function to print errors or ignore them*/
-func CheckError(err error) {
+func CheckError(err error) bool {
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err)
 	}
+	return err == nil
 }
 
 /*Gives elapsed time in milliseconds since a given start time*/
@@ -85,7 +86,10 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 		// start connection
 		conn, err := net.Dial("tcp", server_ip+":"+config.MEASURE_SERVER_PORT)
-		CheckErrMsg(err, "tcp connection to server")
+		if CheckErrMsg(err, "tcp connection to server") {
+			time.Sleep(2 * time.Second)
+			continue
+		}
 		conn.Write([]byte(alg))
 		// now wait for start
 		n, err := conn.Read(recvBuf)
@@ -96,7 +100,10 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		start := time.Now() // start of flow is when client sends first message to send back data
 		flow_times[current_flow][config.START] = float32(start.Sub(original_start).Seconds() * 1000)
 		conn.Write([]byte(config.ACK))
-		CheckErrMsg(err, "opening TCP connection")
+		if CheckErrMsg(err, "opening TCP connection") {
+			time.Sleep(2 * time.Second)
+			continue
+		}
 
 		for {
 			//log.Info("Waiting to read")
@@ -139,75 +146,6 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 }
 
-func measureTCP(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time, num_cycles int) ([]results.BytesTimeMap, []results.OnOffMap, bool) {
-	flow_throughputs := make([]results.BytesTimeMap, num_cycles)
-	bytes_received := uint32(0)
-	recvBuf := make([]byte, config.TCP_TRANSFER_SIZE)
-	//next_measurement := float64(1000)
-	flow_times := make([]results.OnOffMap, num_cycles)
-	current_flow := -1
-	end_flow_times := make([]float32, num_cycles+1)
-	k := 0
-	for k < num_cycles {
-		flow_throughputs[k] = results.BytesTimeMap{}
-		flow_times[k] = results.OnOffMap{}
-		flow_times[k][config.START] = float32(0)
-		flow_times[k][config.END] = float32(0)
-		k++
-	}
-
-	start := time.Now()
-	conn, err := net.Dial("tcp", server_ip+":"+config.MEASURE_SERVER_PORT)
-	CheckError(err)
-	defer conn.Close()
-
-	original_start := start
-	last_received_time := elapsed(start)
-	conn.Write([]byte(alg))
-	start_ch <- start
-
-	for {
-		n, err := conn.Read(recvBuf)
-		if err == io.EOF {
-			//log.Info("Received EOF from tcp connection end")
-			//log.Error(err)
-			break // break out of function
-		}
-		if err != nil {
-			log.Error(err)
-		}
-		if n <= 0 || n >= 3 && string(recvBuf[:n]) == config.FIN {
-			//og.Info("Got signal to end TCP sending")
-			end_flow_times[current_flow+1] = last_received_time // last last recieved time
-			break
-		}
-		if string(recvBuf[:config.START_FLOW_LEN]) == config.START_FLOW || string(recvBuf[(n-config.START_FLOW_LEN):n]) == config.START_FLOW {
-			current_flow++
-			flow_times[current_flow][config.START] = elapsed(original_start)
-			end_flow_times[current_flow] = last_received_time
-			bytes_received = 0
-			start = time.Now()
-			//next_measurement = 1000 // reset to 1KB
-			conn.Write([]byte(config.ACK))
-			// do not count this start flow message as the first measurement
-			n -= config.START_FLOW_LEN
-		}
-		// measure throughput
-		bytes_received += uint32(n)
-		last_received_time = elapsed(original_start)
-		measureThroughput(start, bytes_received, flow_throughputs[current_flow])
-
-	}
-	//log.Info("Trying to send pings to end tcp measuring")
-	end_ch <- time.Time{} // can stop sending pings
-	i := 0
-	for i < num_cycles {
-		flow_times[i][config.END] = end_flow_times[i+1]
-		i++
-	}
-	return flow_throughputs, flow_times, false // last argument is time out argument used for UDP
-}
-
 func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time, num_cycles int) ([]results.BytesTimeMap, []results.OnOffMap, bool) {
 	flow_throughputs := make([]results.BytesTimeMap, num_cycles)
 	flow_times := make([]results.OnOffMap, num_cycles)
@@ -233,33 +171,47 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 		// create a TCP connection to get the genericCC port
 		conn, err := net.Dial("tcp", server_ip+":"+config.OPEN_UDP_PORT)
-
-		CheckErrMsg(err, "Open TCP connection to get genericCC port number")
+		if CheckErrMsg(err, "Open TCP connection to get genericCC port number") {
+			time.Sleep(2 * time.Second)
+			continue
+		}
 		// create UDP listening port
 		srcport := strconv.Itoa((9876 - flow))
 		conn.Write([]byte(alg + "->" + srcport)) // write remy
 		//log.WithFields(log.Fields{"port": srcport}).Info("Listening on src port")
 
 		n, err := conn.Read(recvBuf)
-		CheckErrMsg(err, "Trying to receive port number from genericCC")
+		if CheckErrMsg(err, "Trying to receive port number from genericCC") {
+			time.Sleep(2 * time.Second)
+			continue
+		}
 		gccPort := string(recvBuf[:n])
 		//log.WithFields(log.Fields{"port": gccPort}).Info("Received port number genericCC will be running on")
 
 		laddr, err := net.ResolveUDPAddr("udp", ":"+srcport) // listen at a known port for later udp messages
-		CheckErrMsg(err, "creating laddr")
-		receiver, err := net.ListenUDP("udp", laddr)
+		if CheckErrMsg(err, "creating laddr") {
+			continue
+		}
 
-		CheckErrMsg(err, "error on creating receiver for listen UDP")
+		receiver, err := net.ListenUDP("udp", laddr)
+		if CheckErrMsg(err, "error on creating receiver for listen UDP") {
+			continue
+		}
 
 		// start listening for genericCC
 		gccAddr, err := net.ResolveUDPAddr("udp", server_ip+":"+gccPort)
-		CheckErrMsg(err, "resolving addr to generic CC port given")
+		if CheckErrMsg(err, "resolving addr to generic CC port given") {
+			continue
+		}
 
 		// punch hole in NAT for genericCC
 		_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
 		_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
 		_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
-		CheckErrMsg(err, "Punching NAT for genericCC")
+		if CheckErrMsg(err, "Punching NAT for genericCC") {
+			time.Sleep(2 * time.Second)
+			continue
+		}
 		//log.Info("Open Sesame!: ", gccAddr)
 
 		// write ACK to server to server can start genericCC
@@ -321,138 +273,6 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	return flow_throughputs, flow_times, timed_out
 }
 
-/*Very similar to start tcp, except sends back a packet with the rec. timestamp*/
-func measureUDP(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time, num_cycles int) ([]results.BytesTimeMap, []results.OnOffMap, bool) {
-	flow_throughputs := make([]results.BytesTimeMap, num_cycles)
-	bytes_received := uint32(0)
-	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
-	shouldEcho := (alg[:4] == "remy")
-	//next_measurement := float64(config.INITIAL_X_VAL)
-	flow_times := make([]results.OnOffMap, num_cycles)
-	end_flow_times := make([]float32, num_cycles+1)
-	current_flow := 0
-	started_flow := false
-	timed_out := false
-	k := 0
-	for k < num_cycles {
-		flow_throughputs[k] = results.BytesTimeMap{}
-		flow_times[k] = results.OnOffMap{}
-		flow_times[k][config.START] = float32(0)
-		flow_times[k][config.END] = float32(0)
-		k++
-	}
-
-	// create TCP connection to get the gcc port
-	conn, err := net.Dial("tcp", server_ip+":"+config.OPEN_UDP_PORT)
-	CheckErrMsg(err, "Open TCP connection to get genericCC port number")
-	defer conn.Close()
-	conn.Write([]byte(alg)) // write remy
-
-	n, err := conn.Read(recvBuf)
-	CheckErrMsg(err, "Trying to receive port number from genericCC")
-	gccPort := string(recvBuf[:n])
-	//log.WithFields(log.Fields{"port": gccPort}).Info("Received port number genericCC will be running on")
-
-	// create UDP listening port
-	laddr, err := net.ResolveUDPAddr("udp", ":"+config.CLIENT_UDP_PORT) // listen at a known port for later udp messages
-	CheckErrMsg(err, "creating laddr")
-	receiver, err := net.ListenUDP("udp", laddr)
-	CheckErrMsg(err, "error on creating receiver for listen UDP")
-	defer receiver.Close()
-
-	// start listening on genericCC
-	gccAddr, err := net.ResolveUDPAddr("udp", server_ip+":"+gccPort)
-	CheckErrMsg(err, "resolving addr to generic CC port given")
-
-	// punch hole in NAT for genericCC
-	_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
-	if err != nil {
-		log.Panic(err)
-	}
-	//log.Info("Wrote open sesame")
-
-	// write ACK to the server so server can start genericCC
-	conn.Write([]byte(config.ACK))
-
-	// loop to read bytes and send back to the server - with genericCC
-	start := time.Now()
-	original_start := start
-	last_received_time := elapsed(start)
-	start_ping := true
-	for {
-		// set the read deadline to be well above the off time
-		receiver.SetReadDeadline(time.Now().Add(config.CLIENT_TIMEOUT * time.Second))
-
-		n, raddr, err := receiver.ReadFromUDP(recvBuf)
-		//log.Info("read from udp")
-		// TODO maybe add one RTT here
-		if start_ping {
-			start = time.Now()
-			start_ch <- start
-			start_ping = false
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				break
-			} else if err, ok := err.(net.Error); ok && err.Timeout() {
-				// timeout error -> break and return an error
-				timed_out = true
-				break
-			} else {
-				log.Error(err)
-			}
-		}
-		if string(recvBuf[:config.FIN_LEN]) == config.FIN {
-			//log.Info("Received FIN")
-			end_flow_times[current_flow+1] = last_received_time // last end flow time
-			break
-		}
-		if ReadHeaderVal(recvBuf, config.SEQNUM_START, config.SEQNUM_END, binary.LittleEndian) == -1 {
-			//if string(recvBuf[:config.START_FLOW_LEN]) == config.START_FLOW {
-			//log.Info("Received start flow, incrementing current flow")
-			if started_flow {
-				current_flow++
-			} else {
-				started_flow = true
-			}
-			//log.WithFields(log.Fields{"current flow": current_flow}).Info("boohoo")
-
-			flow_times[current_flow][config.START] = elapsed(original_start)
-			end_flow_times[current_flow] = last_received_time
-			//log.WithFields(log.Fields{"last received": last_received_time, "current": elapsed(original_start)}).Info("Received START FLOW GOTTA START A NEW ONE")
-			bytes_received = 0
-			//next_measurement = 1000 // reset to 1KB
-			start = time.Now()
-			// echo packet
-			receiver.WriteToUDP(recvBuf[:n], raddr)
-			continue
-		}
-
-		// measure throughput
-		bytes_received += uint32(n)
-		last_received_time = elapsed(original_start)
-		measureThroughput(start, bytes_received, flow_throughputs[current_flow])
-
-		// echo packet with receive timestamp
-		if shouldEcho {
-			//log.Info("-----")
-			echo := SetHeaderVal(recvBuf[:n], config.RECEIVE_TIMESTAMP_START, binary.LittleEndian, elapsed(start))
-			// TODO can just send back the recvbuf
-			receiver.WriteToUDP(echo.Bytes(), raddr)
-		}
-	}
-	//log.Info("Trying to end signal to stop sending pings channel")
-	end_ch <- time.Time{} // can stop sending pings
-	//log.Info("Returning from the UDP thing")
-	i := 0
-	for i < num_cycles {
-		flow_times[i][config.END] = end_flow_times[i+1]
-		i++
-	}
-	return flow_throughputs, flow_times, timed_out
-}
-
 /*Starts a ping chain - stops when the other goroutine sends a message over a channel*/
 func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time, protocol string, port string) results.TimeRTTMap {
 	//log.Info("entering the send ping function")
@@ -483,27 +303,32 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 
 					recvBuf := make([]byte, config.PING_SIZE_BYTES)
 					c, err := net.Dial(protocol, server_ip+":"+port)
+					if CheckError(err) {
+						return
+					}
 					defer c.Close()
-					CheckError(err)
 					//log.Info("Waiting to write ping")
 					send_timestamp := elapsed(start)
 					c.Write(pingBuf)
 					//log.Info("Waiting to read from ping buf")
 					_, err = c.Read(recvBuf)
 					recv_timestamp := elapsed(start)
-					CheckError(err)
+					if CheckError(err) {
+						return
+					}
 					rtt := (recv_timestamp - send_timestamp)
 					mutex.Lock()
 					m[send_timestamp] = rtt
 					mutex.Unlock()
-					//log.WithFields(log.Fields{"protocol": protocol, "rtt": rtt, "sent": send_timestamp}).Warn("Ping Info")
 				}(rtt_dict)
 			}
 			time.Sleep(time.Millisecond * 500)
 		}
 	} else { // tcp connection
 		conn, err := net.Dial("tcp", server_ip+":"+port)
-		CheckError(err)
+		if CheckError(err) {
+			return rtt_dict
+		}
 		defer conn.Close()
 
 		start := <-start_ch // wait for start
@@ -522,7 +347,9 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 				//log.WithFields(log.Fields{"send time": send_timestamp, "i": i}).Info("TCP-ping send time")
 				conn.Write([]byte(strconv.Itoa(i)))
 				_, err = conn.Read(recvBuf)
-				CheckErrMsg(err, "read on tcp pings")
+				if CheckErrMsg(err, "read on tcp pings") {
+					continue
+				}
 				recv_timestamp := elapsed(start)
 				rtt := (recv_timestamp - send_timestamp)
 				//log.WithFields(log.Fields{"recv time": recv_timestamp, "rtt": rtt, "bytes": n, "buf": string(recvBuf[:n])}).Info("TCP ping times")
@@ -568,44 +395,21 @@ func runExperiment(f func(server_ip string, alg string, start_ch chan time.Time,
 }
 
 func sendReport(report []byte) {
-	// send all bytes in 2048 byte  chunks
-	// LARGE_BUF_SIZE := 15000
-	// ack_buf := make([]byte, len(config.ACK))
-	// end_buf := []byte(config.FIN)
 	conn, err := net.Dial("tcp", config.DB_IP+":"+config.DB_SERVER_PORT)
-	CheckError(err)
+	if CheckError(err) {
+		return
+	}
 	defer conn.Close()
 	conn.Write(report)
-	//log.WithFields(log.Fields{"size": len(report)}).Info("Sending size bytes in chunks")
-	// bytes_written := 0
-	// for bytes_written < len(report) {
-	// 	if bytes_written+LARGE_BUF_SIZE >= len(report) {
-	// 		log.WithFields(log.Fields{"x": len(report) - bytes_written}).Info("Writing x more bytes")
-	// 		conn.Write(report[bytes_written:])
-	// 		conn.Read(ack_buf)
-	// 		if string(ack_buf) != config.ACK {
-	// 			log.Panic("Server did not ack back in report transfer")
-	// 		}
-	// 		log.Info("About to write the end into the connection")
-	// 		conn.Write(end_buf)
-	// 		break
-	// 	} else {
-	// 		conn.Write(report[bytes_written : bytes_written+LARGE_BUF_SIZE])
-	// 		conn.Read(ack_buf)
-	// 		if string(ack_buf) != config.ACK {
-	// 			log.Panic("Server did not ack back in report transfer")
-	// 		}
-	// 		log.WithFields(log.Fields{"x": config.TRANSFER_BUF_SIZE}).Info("Writing x more bytes")
-	// 		bytes_written += config.TRANSFER_BUF_SIZE
-	// 	}
-	// }
 }
 
 /*Contact the known DB server for a list of IPs to run the experiment at*/
 func getIPS() (results.IPList, int) {
 	conn, err := net.Dial("tcp", config.DB_IP+":"+config.IP_SERVER_PORT)
+	if CheckError(err) {
+		return make(results.IPList), 0
+	}
 	defer conn.Close()
-	CheckError(err)
 	ack_buf := []byte("ack")
 	recv_buf := make([]byte, config.LARGE_BUF_SIZE)
 
@@ -613,7 +417,9 @@ func getIPS() (results.IPList, int) {
 
 	// write ack, get back list of IPs
 	n, err := conn.Read(recv_buf)
-	CheckError(err)
+	if CheckError(err) {
+		return make(results.IPList), 0
+	}
 	ip_list, num_cycles := results.DecodeIPList(recv_buf[:n])
 
 	// for key, val := range ip_list {
@@ -626,8 +432,10 @@ func getIPS() (results.IPList, int) {
 //function to get the public ip address - found online
 func GetOutboundIP() string {
 	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if CheckError(err) {
+		return ""
+	}
 	defer conn.Close()
-	CheckError(err)
 	localAddr := conn.LocalAddr().String()
 	idx := strings.LastIndex(localAddr, ":")
 	return localAddr[0:idx]
@@ -680,15 +488,18 @@ func currentTime() string {
 	return fmt.Sprintf("%d.%d.%d", hour, min, sec)
 }
 
-func CheckErrMsg(err error, message string) { // check error
+func CheckErrMsg(err error, message string) bool { // check error
 	if err != nil {
-		log.WithFields(log.Fields{"msg": message}).Fatal(err)
+		log.WithFields(log.Fields{"msg": message}).Error(err)
 	}
+	return err == nil
 }
 
 func getURLFromServer(gg results.GraphInfo) string {
 	conn, err := net.Dial("tcp", config.DB_IP+":"+config.DB_GRAPH_PORT)
-	CheckError(err)
+	if CheckError(err) {
+		return "unknown"
+	}
 	defer conn.Close()
 	conn.Write(results.EncodeGraphInfo(&gg))
 	recvBuf := make([]byte, 2048)
