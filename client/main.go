@@ -454,7 +454,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 	for _, alg := range algs {
 		alg_line_split := strings.Split(alg, "-")
 		proto := strings.ToLower(alg_line_split[0])
-		alg := strings.ToLower(alg_line_split[1])
+		alg := strings.ToLower(strings.Join(alg_line_split[1:], "-"))
 		log.WithFields(log.Fields{"alg": alg, "proto": proto, "server": IP}).Info(fmt.Sprintf("Starting Experiment %d of %d", place+1, total_experiments))
 
 		if proto == "tcp" {
