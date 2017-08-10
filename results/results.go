@@ -12,7 +12,7 @@ type BytesTimeMap map[uint32]float32
 type TimeRTTMap map[float32]float32
 type OnOffMap map[string]float32
 
-type IPList map[string](map[string][]string)
+type IPList map[string]([]string)
 type GraphInfo struct { // info about the server and time sent to get the correct graph URL
 	ServerIP string
 	SendTime string

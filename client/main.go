@@ -619,14 +619,10 @@ func GetOutboundIP() string {
 	return localAddr[0:idx]
 }
 
-func runExperimentOnMachine(IP string, alg_map map[string][]string, num_cycles int) string {
+func runExperimentOnMachine(IP string, algs []string, num_cycles int) string {
 
 	// runs the experiment on the given machine, and uploads the results to the DB server
 	// addresses and algorithms to test
-	udp_algorithms := alg_map["UDP"]
-	tcp_algorithms := alg_map["TCP"]
-	// tcp_algorithms = []string{}
-	// udp_algorithms = []string{}
 	client_ip := GetOutboundIP()
 
 	report := results.CCResults{
@@ -636,49 +632,21 @@ func runExperimentOnMachine(IP string, alg_map map[string][]string, num_cycles i
 		Delay:      make(map[string]results.TimeRTTMap),
 		FlowTimes:  make(map[string][]results.OnOffMap)}
 
-	for _, alg := range tcp_algorithms {
-		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
-		runExperiment(measureTCP2, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, num_cycles)
-		// for ind, val := range report.Throughput[alg] {
-		// 	log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
-		// 	log.WithFields(log.Fields{"throughput dict": val}).Info("Dict")
-		// }
-		// for ind, val := range report.FlowTimes[alg] {
-		// 	log.WithFields(log.Fields{"flow number": ind, "flow start": val[config.START], "flow end": val[config.END]}).Info("Flow times")
-		// }
-		// for key, val := range report.Delay[alg] {
-		// 	log.WithFields(log.Fields{"time sent": key, "rtt": val, "alg": alg}).Info("Ping Times")
-		// }
-	}
-	//log.Debug("Finished TCP algorithms")
-	for _, alg := range udp_algorithms {
-		log.WithFields(log.Fields{"alg": alg}).Info("starting experiment")
-		runExperiment(measureUDP2, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, num_cycles)
-		// for ind, val := range report.FlowTimes[alg] {
-		// 	log.WithFields(log.Fields{"flow number": ind, "flow start": val[config.START], "flow end": val[config.END]}).Info("Flow times")
-		// }
-		// for ind, val := range report.Throughput[alg] {
-		// 	log.WithFields(log.Fields{"flow number": ind, "length of throughput dict": len(val)}).Info("throughput info")
-		// }
-		// if !timed_out {
-		// 	for ind, val := range report.Throughput[alg] {
-		// 		log.WithFields(log.Fields{"flow number": ind}).Info("Flow number")
-		// 		log.WithFields(log.Fields{"throughput dict": val}).Info("Dict")
-		// 	}
-		// 	for ind, val := range report.FlowTimes[alg] {
-		// 		log.WithFields(log.Fields{"flow number": ind, "flow start": val[config.START], "flow end": val[config.END]}).Info("Flow times")
-		// 	}
-		// 	for key, val := range report.Delay[alg] {
-		// 		log.WithFields(log.Fields{"time sent": key, "rtt": val, "alg": alg}).Info("Ping Times")
-		// 	}
-		// } else {
-		// 	log.WithFields(log.Fields{"IP": IP}).Warn("UDP sending timed out")
-		// }
+	for _, alg := range algs {
+		alg_line_split := strings.Split(alg, "-")
+		proto := strings.ToLower(alg_line_split[0])
+		alg := strings.ToLower(alg_line_split[1])
+		if proto == "tcp" {
+			log.WithFields(log.Fields{"alg": alg, "proto": proto}).Info("Starting experiment")
+			runExperiment(measureTCP2, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, num_cycles)
+		} else if proto == "udp" {
+			log.WithFields(log.Fields{"alg": alg, "proto": proto}).Info("Starting experiment")
+			runExperiment(measureUDP2, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, num_cycles)
+		} else {
+			log.WithFields(log.Fields{"alg": alg, "proto": proto}).Error("Unknown protocol")
+		}
 
 	}
-	//log.Debug("Finished UDP algorithms")
-
-	// print out the TCP results and the UDP results
 
 	// print the reports
 
@@ -719,10 +687,8 @@ func main() {
 	// bootstrap -- ask one known server for a list of other server IP
 	if false {
 		mahimahi := os.Getenv("MAHIMAHI_BASE")
-		m := make(map[string][]string)
-		m["UDP"] = []string{"remy=bigbertha-100x.dna.5"}
-		m["TCP"] = []string{}
-		runExperimentOnMachine(mahimahi, m, config.NUM_CYCLES)
+		algs := []string{"remy=bigbertha-100x.dna.5", "cubic"}
+		runExperimentOnMachine(mahimahi, algs, config.NUM_CYCLES)
 	} else {
 		ip_map, num_cycles := getIPS()
 		sendMap := make(map[string]string) // maps IPs to times the report was sent

@@ -6,17 +6,18 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
-  "os/exec"
+
 	"../config"
 	"../results"
 	log "github.com/sirupsen/logrus"
 )
 
 func getIPList(ip_file string) (results.IPList, int) {
-	ip_list := make(map[string](map[string][]string))
+	ip_list := make(results.IPList)
 	var num_cycles int
 	file, err := os.Open(ip_file)
 	defer file.Close()
@@ -34,27 +35,13 @@ func getIPList(ip_file string) (results.IPList, int) {
 			continue
 		}
 		ip := ip_line_split[0]
-		udp_algorithms := make([]string, 0)
-		tcp_algorithms := make([]string, 0)
-		udp := true
-		for _, val := range ip_line_split[3:] { // first val is IP, 2nd val is location, 3rd val is "UDP"
-			if val == "TCP" {
-				udp = false
-				continue
-			}
-			if udp {
-				udp_algorithms = append(udp_algorithms, val)
-			} else {
-				tcp_algorithms = append(tcp_algorithms, val)
-			}
+		algs := make([]string, 0)
+		for _, val := range ip_line_split[2:] { // first val is IP, 2nd val is location
+			algs = append(algs, val)
 		}
 
-		alg_map := make(map[string][]string)
-		alg_map["UDP"] = udp_algorithms
-		alg_map["TCP"] = tcp_algorithms
-
-		ip_list[ip] = alg_map
-		log.WithFields(log.Fields{"IP": ip, "alg map": alg_map}).Info("IP LIST")
+		ip_list[ip] = algs
+		log.WithFields(log.Fields{"IP": ip, "algs": algs}).Info("IP LIST")
 	}
 	checkError(scanner.Err())
 	return ip_list, num_cycles
@@ -187,23 +174,22 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 			_, err = f.Write(b)
 			checkErrMsg(err, "writing bytes to file")
 
-
-      // make the graph -> name it according to the time and location
-      graph_title := fmt.Sprintf("Transfer to %s AWS", location)
-      graph_location := fmt.Sprintf("%s_%s", current_time, location)
-      graph_directory := fmt.Sprintf("%s/%s/%s", config.PATH_TO_GRAPH_RESULTS, server_file, current_date)
-      err = os.MkdirAll(graph_directory, 0777)
+			// make the graph -> name it according to the time and location
+			graph_title := fmt.Sprintf("Transfer to %s AWS", location)
+			graph_location := fmt.Sprintf("%s_%s", current_time, location)
+			graph_directory := fmt.Sprintf("%s/%s/%s", config.PATH_TO_GRAPH_RESULTS, server_file, current_date)
+			err = os.MkdirAll(graph_directory, 0777)
 			if err != nil {
 				log.WithFields(log.Fields{"err": err, "path": path}).Panic("Creating graph path to store results")
 			}
 
-      args := []string{full_path, graph_location, graph_title, graph_directory}
-      cmd := exec.Command(config.PATH_TO_GRAPH_SCRIPT, args...) // graphing scripts  moves the image to file with the python web server running
-      cmd.Stdout = os.Stdout
-      if err = cmd.Run(); err != nil {
-        log.Info("Error in running graphing script")
-        log.Error(err)
-      }
+			args := []string{full_path, graph_location, graph_title, graph_directory}
+			cmd := exec.Command(config.PATH_TO_GRAPH_SCRIPT, args...) // graphing scripts  moves the image to file with the python web server running
+			cmd.Stdout = os.Stdout
+			if err = cmd.Run(); err != nil {
+				log.Info("Error in running graphing script")
+				log.Error(err)
+			}
 		}(report)
 
 	}
@@ -228,16 +214,16 @@ func getGraphInfo(ip_file string) {
 			log.Warning(err)
 		}
 		go func(c *net.TCPConn) {
-      // decode the graph info and client IP, and from that construct the graph:w
+			// decode the graph info and client IP, and from that construct the graph:w
 			defer c.Close()
 			p := make([]byte, 2048) // large buf size
-		  n, err := conn.Read(p)
-      checkErrMsg(err, "reading URL prefix string")
-      report := results.DecodeGraphInfo(p[:n])
-      server_ip := report.ServerIP
-      server_file := fmt.Sprintf("%s_logs", server_ip)
-      current_time := report.SendTime
-      current_date := currentDate()
+			n, err := conn.Read(p)
+			checkErrMsg(err, "reading URL prefix string")
+			report := results.DecodeGraphInfo(p[:n])
+			server_ip := report.ServerIP
+			server_file := fmt.Sprintf("%s_logs", server_ip)
+			current_time := report.SendTime
+			current_date := currentDate()
 
 			location := getIPLocation(ip_file, server_ip)
 			if location != "NOT_FOUND" {
@@ -245,11 +231,11 @@ func getGraphInfo(ip_file string) {
 			}
 			filename := fmt.Sprintf("%s_%s.png", current_time, location)
 			path := fmt.Sprintf("%s/%s", server_file, current_date)
-      // find the correct URL and return
-      URL := config.URL_PREFIX + "/" + path + "/" + filename
-      conn.Write([]byte(URL))
-    }(conn)
-  }
+			// find the correct URL and return
+			URL := config.URL_PREFIX + "/" + path + "/" + filename
+			conn.Write([]byte(URL))
+		}(conn)
+	}
 }
 
 func currentDate() string {
@@ -293,7 +279,7 @@ func main() {
 	db_channel := make(chan results.CCResults)
 	go dbServer(db_channel)
 	go dbWorker(db_channel, config.IP_LIST_LOCATION)
-  go getGraphInfo(config.IP_LIST_LOCATION)
+	go getGraphInfo(config.IP_LIST_LOCATION)
 	<-quit
 
 }
