@@ -105,10 +105,9 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 			//log.Info("read")
 
 			if err == io.EOF || n <= 0 {
-				//log.Warn("server closed connection")
+				log.Warn("Server closed connection")
 				break
 			} else if err, ok := err.(net.Error); ok && err.Timeout() {
-				//log.Warn("timed out on read")
 				break
 			} else if err != nil {
 				log.Error(err)
@@ -119,9 +118,17 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 			measureThroughput(start, bytes_received, flow_throughputs[current_flow])
 
 		}
+		log.WithFields(log.Fields{
+			"trial":          current_flow + 1,
+			"bytes_received": fmt.Sprintf("%.3f MBytes", float64(bytes_received)/1000000.0),
+			"time_elapsed":   time.Duration(flow_throughputs[current_flow][bytes_received]) * time.Millisecond,
+			"throughput":     fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[current_flow][bytes_received], bytes_received)),
+		}).Info("Finished Trial")
+
 		flow_times[current_flow][config.END] = last_received_time
 		conn.Close() // close connection before next one
 		current_flow++
+
 		// sleep for some time
 		// 8/10/17: hari requested no sleep time
 		// time.Sleep(time.Second * 5)
@@ -297,6 +304,12 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 			}
 
 		}
+		log.WithFields(log.Fields{
+			"trial":          flow + 1,
+			"bytes_received": fmt.Sprintf("%.3f MBytes", float64(bytes_received)/1000000.0),
+			"time_elapsed":   time.Duration(flow_throughputs[flow][bytes_received]) * time.Millisecond,
+			"throughput":     fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[flow][bytes_received], bytes_received)),
+		}).Info("Finished Trial")
 
 		// close the connection to the TCP server and listening on UDP port
 		conn.Close()
@@ -620,7 +633,7 @@ func GetOutboundIP() string {
 	return localAddr[0:idx]
 }
 
-func runExperimentOnMachine(IP string, algs []string, num_cycles int) string {
+func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int, total_experiments int) (string, int) {
 
 	// runs the experiment on the given machine, and uploads the results to the DB server
 	// addresses and algorithms to test
@@ -637,15 +650,17 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int) string {
 		alg_line_split := strings.Split(alg, "-")
 		proto := strings.ToLower(alg_line_split[0])
 		alg := strings.ToLower(alg_line_split[1])
+		log.WithFields(log.Fields{"alg": alg, "proto": proto, "server": IP}).Info(fmt.Sprintf("Starting Experiment %d of %d", place+1, total_experiments))
+
 		if proto == "tcp" {
-			log.WithFields(log.Fields{"alg": alg, "proto": proto}).Info("Starting experiment")
 			runExperiment(measureTCP2, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, num_cycles)
 		} else if proto == "udp" {
-			log.WithFields(log.Fields{"alg": alg, "proto": proto}).Info("Starting experiment")
 			runExperiment(measureUDP2, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, num_cycles)
 		} else {
-			log.WithFields(log.Fields{"alg": alg, "proto": proto}).Error("Unknown protocol")
+			log.Error("Unknown protocol!")
 		}
+
+		place += 1
 
 	}
 
@@ -657,7 +672,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int) string {
 	report.SendTime = sendTime
 	log.Info("Sending report to server")
 	sendReport(results.EncodeCCResults(&report))
-	return sendTime
+	return sendTime, place
 }
 
 func currentTime() string {
@@ -689,15 +704,21 @@ func main() {
 	if false {
 		mahimahi := os.Getenv("MAHIMAHI_BASE")
 		algs := []string{"remy=bigbertha-100x.dna.5", "cubic"}
-		runExperimentOnMachine(mahimahi, algs, config.NUM_CYCLES)
+		runExperimentOnMachine(mahimahi, algs, config.NUM_CYCLES, 0, len(algs))
 	} else {
 		ip_map, num_cycles := getIPS()
 		sendMap := make(map[string]string) // maps IPs to times the report was sent
 		log.Info("This script will contact different servers to transfer data using different congestion control algorithms, and records data about the performance of each algorithm. It may take around 10 minutes. We're trying to guage the performance of an algorithm designed by Remy, a program that automatically generates congestion control algorithms based on input parameters.")
 		count := 1
+		total_experiments := 0
+		place := 0
+		for _, val := range ip_map {
+			total_experiments += len(val)
+		}
 		for IP, val := range ip_map {
-			log.Info("Contacting server # ", count)
-			sendTime := runExperimentOnMachine(IP, val, num_cycles)
+			log.WithFields(log.Fields{"ip": IP}).Info(fmt.Sprintf("Contacting Server %d/%d ", count, len(ip_map)))
+			sendTime, new_place := runExperimentOnMachine(IP, val, num_cycles, place, total_experiments)
+			place = new_place
 			sendMap[IP] = sendTime
 			count++
 		}
