@@ -20,7 +20,7 @@ func readfile(filepath string, outfile string) {
     log.Panic("Must provide a valid filepath")
   }
 
-  filesizes := []uint32{1000,5000,10000}
+  filesizes := []uint32{5000,10000,20000}
   // open the file and read it
   f, err := os.Open(filepath)
   defer f.Close()
@@ -43,6 +43,8 @@ func readfile(filepath string, outfile string) {
     parseLogs(&results, filesize * 1000, outfile, w) // array is in KB, not bytes
   }
   w.Flush()
+
+  createThroughputDelayLogs(&results, outfile)
 
   fmt.Printf("Wrote data to %s\n", outfile + ".csv")
 }
@@ -73,6 +75,58 @@ func (s ByFloat32) Less(i,j int) bool {
   return s[i] < s[j]
 }
 
+func createThroughputDelayLogs(cc *results.CCResults, outfile string) {
+  // for each algorithm in the results -> plot delay over time and throughput over time
+  // ideally will be parsed by an R script to make throughput delay plots
+  for alg, thr := range cc.Throughput {
+      log.Info("Creating file foor alg ", alg, "outfile ", outfile)
+      algfile := fmt.Sprintf("%s_%s.csv", alg, outfile)
+      algfile_fd, err := os.Create(algfile)
+      log.Info("CSV file is ", algfile)
+      checkErrMsg(err, "opening csv file for writing")
+
+      defer algfile_fd.Close()
+      w := bufio.NewWriter(algfile_fd)
+      _, err = fmt.Fprintf(w, "count,time,throughput,flow\n")
+    // write header, then parse dictionary and write that out
+    count := 1
+    for flow, flow_thr := range thr {
+      log.WithFields(log.Fields{"flow": flow, "len": len(flow_thr), "alg": alg}).Info("flow throughput")
+      for bytes_rec, file_time := range flow_thr {
+        thr_measurement := float32(bytes_rec) * float32(config.BYTES_TO_MBITS)/ (float32(file_time)/1000) // convert back to ms
+        flow_str := fmt.Sprintf("flow-%d", flow)
+        fmt.Fprintf(w, "%d,%g,%g,%s\n", count,file_time/1000, thr_measurement, flow_str)
+        count++
+      }
+    }
+    w.Flush()
+  }
+  for alg, alg_onoff := range cc.FlowTimes {
+    // do the delay log file
+    delay_map := cc.Delay[alg]
+    delayfile := fmt.Sprintf("%s_%s_delay.csv", alg, outfile)
+    delayfile_fd, err := os.Create(delayfile)
+    checkErrMsg(err, "Opening csv file for delay writing")
+    defer delayfile_fd.Close()
+    wd := bufio.NewWriter(delayfile_fd)
+    _, err = fmt.Fprintf(wd, "count,time,rtt,flow\n")
+    count := 1
+    for flow, onoffmap := range alg_onoff {
+      flow_start := onoffmap[config.START]
+      flow_end := onoffmap[config.END]
+      flow_str := fmt.Sprintf("flow-%d", flow)
+      log.WithFields(log.Fields{"start": flow_start, "end": flow_end}).Info("flow startt and end")
+      for sendtime, rtt := range delay_map {
+        if sendtime >= flow_start && sendtime <= flow_end {
+          fmt.Fprintf(wd, "%d,%g,%g,%s\n", count,(sendtime - flow_start)/1000, rtt, flow_str)
+          count++
+        }
+      }
+    }
+    wd.Flush()
+  }
+}
+
 func parseLogs(cc *results.CCResults, file_size uint32, outfile string, w *bufio.Writer) {
 
   /*for alg, flow_times := range cc.FlowTimes {
@@ -82,9 +136,9 @@ func parseLogs(cc *results.CCResults, file_size uint32, outfile string, w *bufio
 
   for alg, thr := range cc.Throughput {
     log.WithFields(log.Fields{"alg": alg}).Info("result")
-    if alg[:4] == "remy" {
+    /*if alg[:4] == "remy" {
       log.WithFields(log.Fields{"len of dictionary": len(thr), "dict": thr}).Info("ugh")
-    }
+    }*/
     // right now - start with one flow -> get average throughput for everytime
     flow_tot_del := float32(0)
     flow_num_valid := 0
@@ -112,7 +166,7 @@ func parseLogs(cc *results.CCResults, file_size uint32, outfile string, w *bufio
             //log.WithFields(log.Fields{"file_size": file_size, "time": file_time, "flow": flow, "alg": alg}).Info("got to filesize")
             // get average delay until this time
             avg_delay := getAvgDelayUntil(cc.FlowTimes[alg][flow], cc.Delay[alg], file_time)
-            log.WithFields(log.Fields{"file_size": file_size, "thr": thr_measurement, "avg_delay": avg_delay, "alg": alg, "flow": flow}).Info("Thr, delay pt")
+            //log.WithFields(log.Fields{"file_size": file_size, "thr": thr_measurement, "avg_delay": avg_delay, "alg": alg, "flow": flow}).Info("Thr, delay pt")
           if avg_delay != 0 {
             flow_num_valid ++
             flow_tot_del += avg_delay
