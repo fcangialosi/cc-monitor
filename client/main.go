@@ -21,7 +21,7 @@ func CheckError(err error) bool {
 	if err != nil {
 		log.Error(err)
 	}
-	return err == nil
+	return err != nil
 }
 
 /*Gives elapsed time in milliseconds since a given start time*/
@@ -422,9 +422,6 @@ func getIPS() (results.IPList, int) {
 	}
 	ip_list, num_cycles := results.DecodeIPList(recv_buf[:n])
 
-	// for key, val := range ip_list {
-	// 	log.WithFields(log.Fields{"IP": key, "alg map": val, "num_cycles": num_cycles}).Info("IP")
-	// }
 	return ip_list, num_cycles
 
 }
@@ -492,7 +489,7 @@ func CheckErrMsg(err error, message string) bool { // check error
 	if err != nil {
 		log.WithFields(log.Fields{"msg": message}).Error(err)
 	}
-	return err == nil
+	return err != nil
 }
 
 func getURLFromServer(gg results.GraphInfo) string {
