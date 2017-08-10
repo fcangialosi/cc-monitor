@@ -143,12 +143,12 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 	for {
 		report := <-ch
 		// spawn go routine to deal with this report
-		go func(results.CCResults) {
+		go func(rep results.CCResults) {
 			log.Info("got decoded report from channel")
-			server_ip := report.ServerIP
-			client_ip := strings.Split(report.ClientIP, ":")[0]
+			server_ip := rep.ServerIP
+			client_ip := strings.Split(rep.ClientIP, ":")[0]
 			current_date := currentDate()
-			current_time := report.SendTime // client will later ask for where the graph is
+			current_time := rep.SendTime // client will later ask for where the graph is
 
 			// check if everything exists
 			server_file := fmt.Sprintf("%s_logs", server_ip)
@@ -169,27 +169,45 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 			defer f.Close()
 
 			// marshall the struct
-			b := results.EncodeCCResults(&report)
+			b := results.EncodeCCResults(&rep)
 			checkErrMsg(err, "marshalling report into bytes")
 			_, err = f.Write(b)
 			checkErrMsg(err, "writing bytes to file")
 
-			// make the graph -> name it according to the time and location
-			graph_title := fmt.Sprintf("Transfer to %s AWS", location)
-			graph_location := fmt.Sprintf("%s_%s", current_time, location)
-			graph_directory := fmt.Sprintf("%s/%s/%s", config.PATH_TO_GRAPH_RESULTS, server_file, current_date)
-			err = os.MkdirAll(graph_directory, 0777)
+      // make the graph -> name it according to the time and location
+      graph_title := fmt.Sprintf("Transfer_to_%s_AWS", location)
+      graph_location := fmt.Sprintf("%s_%s", current_time, location)
+      graph_directory := fmt.Sprintf("%s/%s/%s/%s", config.PATH_TO_GRAPH_RESULTS, server_file, current_date,current_time)
+      err = os.MkdirAll(graph_directory, 0777)
 			if err != nil {
 				log.WithFields(log.Fields{"err": err, "path": path}).Panic("Creating graph path to store results")
 			}
 
-			args := []string{full_path, graph_location, graph_title, graph_directory}
-			cmd := exec.Command(config.PATH_TO_GRAPH_SCRIPT, args...) // graphing scripts  moves the image to file with the python web server running
-			cmd.Stdout = os.Stdout
-			if err = cmd.Run(); err != nil {
-				log.Info("Error in running graphing script")
-				log.Error(err)
-			}
+      args := []string{full_path, graph_location, graph_title, graph_directory}
+      cmd := exec.Command(config.PATH_TO_GRAPH_SCRIPT, args...) // graphing scripts  moves the image to file with the python web server running
+      cmd.Stdout = os.Stdout
+      if err = cmd.Run(); err != nil {
+        log.Info("Error in running graphing script")
+        log.Error(err)
+      }
+
+      // now make the throughput graph for each of the algorithms
+      for alg, _ := range rep.Throughput {
+        log.Info("Alg is ", alg)
+        // log for graphing script
+        title := fmt.Sprintf("%s_Throughput", alg)
+        thr_log := fmt.Sprintf("%s_%s", alg, graph_location)
+        outfile := fmt.Sprintf("%s_throughput", alg)
+        graph_args := []string{thr_log, outfile, title, graph_directory}
+        log.Info(graph_args)
+
+        cmd = exec.Command(config.PATH_TO_GRAPH_THROUGHPUT_SCRIPT, graph_args...)
+        cmd.Stdout = os.Stdout
+        if err = cmd.Run(); err != nil {
+          log.Info("Error in running graphing script for throughput graphs")
+          log.Error(err)
+        }
+      }
 		}(report)
 
 	}
@@ -229,13 +247,12 @@ func getGraphInfo(ip_file string) {
 			if location != "NOT_FOUND" {
 				server_file = fmt.Sprintf("%s_logs", location)
 			}
-			filename := fmt.Sprintf("%s_%s.png", current_time, location)
-			path := fmt.Sprintf("%s/%s", server_file, current_date)
-			// find the correct URL and return
-			URL := config.URL_PREFIX + "/" + path + "/" + filename
-			conn.Write([]byte(URL))
-		}(conn)
-	}
+			path := fmt.Sprintf("%s/%s/%s", server_file, current_date, current_time)
+      // find the correct URL and return
+      URL := config.URL_PREFIX + "/" + path
+      conn.Write([]byte(URL))
+    }(conn)
+  }
 }
 
 func currentDate() string {
