@@ -123,7 +123,8 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		conn.Close() // close connection before next one
 		current_flow++
 		// sleep for some time
-		time.Sleep(time.Second * 5)
+		// 8/10/17: hari requested no sleep time
+		// time.Sleep(time.Second * 5)
 	}
 
 	end_ch <- time.Time{} // can stop sending pings
