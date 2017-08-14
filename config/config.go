@@ -61,6 +61,7 @@ const START_FLOW = "START_FLOW"
 const START_FLOW_LEN = 10
 const START = "START"
 const END = "END"
+const TRAIN_LENGTH = 8
 
 // alg names
 const REMY = "remy"
