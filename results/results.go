@@ -21,7 +21,7 @@ type CCResults struct {
 	ServerIP   string
 	ClientIP   string
 	Throughput map[string]([]BytesTimeMap)
-	Delay      map[string]TimeRTTMap
+	Delay      map[string][]TimeRTTMap
 	FlowTimes  map[string][]OnOffMap // list of times when the flows "on" started
 	SendTime   string                // string of when client sent this result to the DB
 }
@@ -33,7 +33,7 @@ type DBResult struct {
 	ClientIP   string
 	Alg        string
 	Throughput []BytesTimeMap
-	Delay      TimeRTTMap
+	Delay      []TimeRTTMap
 	FlowTimes  []OnOffMap
 }
 

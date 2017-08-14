@@ -61,222 +61,207 @@ func measureThroughput(start time.Time, bytes_received uint32, m results.BytesTi
 // NOTE: this function is basically a copy of start_remy, except I didn't want them to use the same function,
 // because the remy function requires the echo packet step, and I didn't want to add a condition to check for - if it's tcp or remy (unnecessary time)
 
-func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time, num_cycles int) ([]results.BytesTimeMap, []results.OnOffMap, bool) {
-	flow_throughputs := make([]results.BytesTimeMap, num_cycles)
-	flow_times := make([]results.OnOffMap, num_cycles)
-
-	k := 0
-	for k < num_cycles {
-		flow_throughputs[k] = results.BytesTimeMap{}
-		flow_times[k] = results.OnOffMap{}
-		flow_times[k][config.START] = float32(0)
-		flow_times[k][config.END] = float32(0)
-		k++
-	}
+func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time, num_cycles int, cycle int) (results.BytesTimeMap, results.OnOffMap, bool) {
+	flow_throughputs := results.BytesTimeMap{}
+	flow_times := results.OnOffMap{}
+	flow_times[config.START] = float32(0)
+	flow_times[config.END] = float32(0)
 
 	original_start := time.Now()
 	start_ch <- original_start // start pings now
 
 	// loop over each cycle and request TCP server for "1" on and off
-	current_flow := 0
-	for current_flow < num_cycles {
-		last_received_time := float32(0)
-		recvBuf := make([]byte, config.TCP_TRANSFER_SIZE)
-		bytes_received := uint32(0)
+	last_received_time := float32(0)
+	recvBuf := make([]byte, config.TCP_TRANSFER_SIZE)
+	bytes_received := uint32(0)
 
-		// start connection
-		conn, err := net.Dial("tcp", server_ip+":"+config.MEASURE_SERVER_PORT)
-		if CheckErrMsg(err, "tcp connection to server") {
-			time.Sleep(2 * time.Second)
-			continue
-		}
-		conn.Write([]byte(alg))
-		// now wait for start
-		n, err := conn.Read(recvBuf)
-		if string(recvBuf[:n]) != config.START_FLOW {
-			log.Error("Did not receive start from server")
-		}
-		// now start the timer
-		start := time.Now() // start of flow is when client sends first message to send back data
-		flow_times[current_flow][config.START] = float32(start.Sub(original_start).Seconds() * 1000)
-		conn.Write([]byte(config.ACK))
-		if CheckErrMsg(err, "opening TCP connection") {
-			time.Sleep(2 * time.Second)
-			continue
-		}
-
-		// set first deadline for 30 seconds, then 30 seconds after
-		started_flow := false
-		conn.SetReadDeadline(time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second))
-		for {
-			//log.Info("Waiting to read")
-
-			n, err := conn.Read(recvBuf)
-			//log.Info("read")
-
-			if err == io.EOF || n <= 0 {
-				log.Warn("Server closed connection")
-				break
-			} else if err, ok := err.(net.Error); ok && err.Timeout() {
-				break
-			} else if err != nil {
-				log.Error(err)
-			}
-
-			if !started_flow {
-				started_flow = true
-				conn.SetReadDeadline(time.Now().Add(30 * time.Second)) // connection should end 30 seconds from now
-			}
-
-			bytes_received += uint32(n)
-			last_received_time = elapsed(original_start)
-			measureThroughput(start, bytes_received, flow_throughputs[current_flow])
-
-		}
-		log.WithFields(log.Fields{
-			"trial":                 current_flow + 1,
-			"bytes_received":        fmt.Sprintf("%.3f MBytes", float64(bytes_received)/1000000.0),
-			"last_received_data_at": time.Duration(flow_throughputs[current_flow][bytes_received]) * time.Millisecond,
-			"time_elapsed":          elapsed(start) / 1000,
-			"throughput":            fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[current_flow][bytes_received], bytes_received)),
-		}).Info("Finished Trial")
-
-		flow_times[current_flow][config.END] = last_received_time
-		conn.Close() // close connection before next one
-		current_flow++
-
-		// sleep for some time
-		// 8/10/17: hari requested no sleep time
-		// time.Sleep(time.Second * 5)
+	// start connection
+	conn, err := net.Dial("tcp", server_ip+":"+config.MEASURE_SERVER_PORT)
+	if CheckErrMsg(err, "tcp connection to server") {
+		time.Sleep(2 * time.Second)
+		end_ch <- time.Time{} // can stop sending pings
+		return flow_throughputs, flow_times, true
 	}
+	conn.Write([]byte(alg))
+	// now wait for start
+	n, err := conn.Read(recvBuf)
+	if string(recvBuf[:n]) != config.START_FLOW {
+		log.Error("Did not receive start from server")
+	}
+	// now start the timer
+	start := time.Now() // start of flow is when client sends first message to send back data
+	flow_times[config.START] = float32(start.Sub(original_start).Seconds() * 1000)
+	conn.Write([]byte(config.ACK))
+	if CheckErrMsg(err, "opening TCP connection") {
+		time.Sleep(2 * time.Second)
+		end_ch <- time.Time{} // can stop sending pings
+		return flow_throughputs, flow_times, true
+	}
+
+	// set first deadline for 30 seconds, then 30 seconds after
+	started_flow := false
+	conn.SetReadDeadline(time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second))
+	for {
+		//log.Info("Waiting to read")
+
+		n, err := conn.Read(recvBuf)
+		//log.Info("read")
+
+		if err == io.EOF || n <= 0 {
+			log.Warn("Server closed connection")
+			break
+		} else if err, ok := err.(net.Error); ok && err.Timeout() {
+			break
+		} else if err != nil {
+			log.Error(err)
+		}
+
+		if !started_flow {
+			started_flow = true
+			conn.SetReadDeadline(time.Now().Add(30 * time.Second)) // connection should end 30 seconds from now
+		}
+
+		bytes_received += uint32(n)
+		last_received_time = elapsed(original_start)
+		measureThroughput(start, bytes_received, flow_throughputs)
+
+	}
+	log.WithFields(log.Fields{
+		"trial":                 cycle + 1,
+		"bytes_received":        fmt.Sprintf("%.3f MBytes", float64(bytes_received)/1000000.0),
+		"last_received_data_at": time.Duration(flow_throughputs[bytes_received]) * time.Millisecond,
+		"time_elapsed":          elapsed(start) / 1000,
+		"throughput":            fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[bytes_received], bytes_received)),
+	}).Info("Finished Trial")
+
+	flow_times[config.END] = last_received_time
+	conn.Close() // close connection before next one
 
 	end_ch <- time.Time{} // can stop sending pings
 	return flow_throughputs, flow_times, false
 
 }
 
-func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time, num_cycles int) ([]results.BytesTimeMap, []results.OnOffMap, bool) {
-	flow_throughputs := make([]results.BytesTimeMap, num_cycles)
-	flow_times := make([]results.OnOffMap, num_cycles)
+func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time, num_cycles int, cycle int) (results.BytesTimeMap, results.OnOffMap, bool) {
 	timed_out := false
-	k := 0
-	for k < num_cycles {
-		flow_throughputs[k] = results.BytesTimeMap{}
-		flow_times[k] = results.OnOffMap{}
-		flow_times[k][config.START] = float32(0)
-		flow_times[k][config.END] = float32(0)
-		k++
-	}
+	flow_throughputs := results.BytesTimeMap{}
+	flow_times := results.OnOffMap{}
+	flow_times[config.START] = float32(0)
+	flow_times[config.END] = float32(0)
 
 	// send start to ping channel
 	original_start := time.Now()
 	start_ch <- original_start
 
 	// for each flow, start a separate connection to the server to spawn genericCC
-	for flow := 0; flow < num_cycles; flow++ {
-		bytes_received := uint32(0)
-		shouldEcho := (alg[:4] == "remy")
-		recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
+	bytes_received := uint32(0)
+	shouldEcho := (alg[:4] == "remy")
+	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
 
-		// create a TCP connection to get the genericCC port
-		conn, err := net.Dial("tcp", server_ip+":"+config.OPEN_UDP_PORT)
-		if CheckErrMsg(err, "Open TCP connection to get genericCC port number") {
-			time.Sleep(2 * time.Second)
-			continue
-		}
-		// create UDP listening port
-		srcport := strconv.Itoa((9876 - flow))
-		conn.Write([]byte(alg + "->" + srcport)) // write remy
-		//log.WithFields(log.Fields{"port": srcport}).Info("Listening on src port")
-
-		n, err := conn.Read(recvBuf)
-		if CheckErrMsg(err, "Trying to receive port number from genericCC") {
-			time.Sleep(2 * time.Second)
-			continue
-		}
-		gccPort := string(recvBuf[:n])
-		//log.WithFields(log.Fields{"port": gccPort}).Info("Received port number genericCC will be running on")
-
-		laddr, err := net.ResolveUDPAddr("udp", ":"+srcport) // listen at a known port for later udp messages
-		if CheckErrMsg(err, "creating laddr") {
-			continue
-		}
-
-		receiver, err := net.ListenUDP("udp", laddr)
-		if CheckErrMsg(err, "error on creating receiver for listen UDP") {
-			continue
-		}
-
-		// start listening for genericCC
-		gccAddr, err := net.ResolveUDPAddr("udp", server_ip+":"+gccPort)
-		if CheckErrMsg(err, "resolving addr to generic CC port given") {
-			continue
-		}
-
-		// punch hole in NAT for genericCC
-		_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
-		_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
-		_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
-		if CheckErrMsg(err, "Punching NAT for genericCC") {
-			time.Sleep(2 * time.Second)
-			continue
-		}
-		//log.Info("Open Sesame!: ", gccAddr)
-
-		// write ACK to server to server can start genericCC
-		conn.Write([]byte(config.ACK))
-
-		start := time.Now()
-		flow_start := float32(start.Sub(original_start).Seconds() * 1000)
-		last_received_time := flow_start
-		flow_times[flow][config.START] = flow_start
-		// initial timeout -> 30 Seconds
-		receiver.SetReadDeadline(time.Now().Add(config.MINUTE_TIMEOUT * time.Second))
-
-		for {
-			//log.Info("Waiting to read back on the socket")
-			n, raddr, err := receiver.ReadFromUDP(recvBuf)
-			//log.Info("read on the socket")
-
-			if err, ok := err.(net.Error); ok && err.Timeout() {
-				break
-			} else if err == io.EOF {
-				break
-			}
-
-			if ReadHeaderVal(recvBuf, config.SEQNUM_START, config.SEQNUM_END, binary.LittleEndian) == -1 {
-				//log.Info("Read start flow packet")
-				log.WithFields(log.Fields{"time now": elapsed(start) / 1000}).Info("Starting 30 second timer")
-				receiver.SetReadDeadline(time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second)) // should be done 30 seconds from now
-			}
-
-			bytes_received += uint32(n)
-			last_received_time = elapsed(original_start)
-			measureThroughput(start, bytes_received, flow_throughputs[flow])
-
-			// echo packet with receive timestamp
-			if shouldEcho {
-				//log.Info("echo packet")
-				echo := SetHeaderVal(recvBuf[:n], config.RECEIVE_TIMESTAMP_START, binary.LittleEndian, elapsed(start))
-				// TODO can just send back the recvbuf
-				receiver.WriteToUDP(echo.Bytes(), raddr)
-			}
-
-		}
-		log.WithFields(log.Fields{
-			"trial":                 flow + 1,
-			"bytes_received":        fmt.Sprintf("%.3f MBytes", float64(bytes_received)/1000000.0),
-			"last_received_data_at": time.Duration(flow_throughputs[flow][bytes_received]) * time.Millisecond,
-			"time_elapsed":          elapsed(start) / 1000,
-			"throughput":            fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[flow][bytes_received], bytes_received)),
-		}).Info("Finished Trial")
-
-		// close the connection to the TCP server and listening on UDP port
-		conn.Close()
-		receiver.Close()
-		//log.Info("Ending connection and putting in timestamps")
-		flow_times[flow][config.END] = last_received_time
+	// create a TCP connection to get the genericCC port
+	conn, err := net.Dial("tcp", server_ip+":"+config.OPEN_UDP_PORT)
+	if CheckErrMsg(err, "Open TCP connection to get genericCC port number") {
+		time.Sleep(2 * time.Second)
+		end_ch <- time.Time{} // can stop sending pings
+		return flow_throughputs, flow_times, true
 	}
+	// create UDP listening port
+	srcport := strconv.Itoa((9876 - cycle))
+	conn.Write([]byte(alg + "->" + srcport)) // write remy
+	//log.WithFields(log.Fields{"port": srcport}).Info("Listening on src port")
+
+	n, err := conn.Read(recvBuf)
+	if CheckErrMsg(err, "Trying to receive port number from genericCC") {
+		time.Sleep(2 * time.Second)
+		end_ch <- time.Time{} // can stop sending pings
+		return flow_throughputs, flow_times, true
+	}
+	gccPort := string(recvBuf[:n])
+	//log.WithFields(log.Fields{"port": gccPort}).Info("Received port number genericCC will be running on")
+
+	laddr, err := net.ResolveUDPAddr("udp", ":"+srcport) // listen at a known port for later udp messages
+	if CheckErrMsg(err, "creating laddr") {
+		end_ch <- time.Time{} // can stop sending pings
+		return flow_throughputs, flow_times, true
+	}
+
+	receiver, err := net.ListenUDP("udp", laddr)
+	if CheckErrMsg(err, "error on creating receiver for listen UDP") {
+		end_ch <- time.Time{} // can stop sending pings
+		return flow_throughputs, flow_times, true
+	}
+
+	// start listening for genericCC
+	gccAddr, err := net.ResolveUDPAddr("udp", server_ip+":"+gccPort)
+	if CheckErrMsg(err, "resolving addr to generic CC port given") {
+		end_ch <- time.Time{} // can stop sending pings
+		return flow_throughputs, flow_times, true
+	}
+
+	// punch hole in NAT for genericCC
+	_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
+	_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
+	_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
+	if CheckErrMsg(err, "Punching NAT for genericCC") {
+		time.Sleep(2 * time.Second)
+		end_ch <- time.Time{} // can stop sending pings
+		return flow_throughputs, flow_times, true
+	}
+	//log.Info("Open Sesame!: ", gccAddr)
+
+	// write ACK to server to server can start genericCC
+	conn.Write([]byte(config.ACK))
+
+	start := time.Now()
+	flow_start := float32(start.Sub(original_start).Seconds() * 1000)
+	last_received_time := flow_start
+	flow_times[config.START] = flow_start
+	// initial timeout -> 30 Seconds
+	receiver.SetReadDeadline(time.Now().Add(config.MINUTE_TIMEOUT * time.Second))
+
+	for {
+		//log.Info("Waiting to read back on the socket")
+		n, raddr, err := receiver.ReadFromUDP(recvBuf)
+		//log.Info("read on the socket")
+
+		if err, ok := err.(net.Error); ok && err.Timeout() {
+			break
+		} else if err == io.EOF {
+			break
+		}
+
+		if ReadHeaderVal(recvBuf, config.SEQNUM_START, config.SEQNUM_END, binary.LittleEndian) == -1 {
+			//log.Info("Read start flow packet")
+			log.WithFields(log.Fields{"time now": elapsed(start) / 1000}).Info("Starting 30 second timer")
+			receiver.SetReadDeadline(time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second)) // should be done 30 seconds from now
+		}
+
+		bytes_received += uint32(n)
+		last_received_time = elapsed(original_start)
+		measureThroughput(start, bytes_received, flow_throughputs)
+
+		// echo packet with receive timestamp
+		if shouldEcho {
+			//log.Info("echo packet")
+			echo := SetHeaderVal(recvBuf[:n], config.RECEIVE_TIMESTAMP_START, binary.LittleEndian, elapsed(start))
+			// TODO can just send back the recvbuf
+			receiver.WriteToUDP(echo.Bytes(), raddr)
+		}
+
+	}
+	log.WithFields(log.Fields{
+		"trial":                 cycle + 1,
+		"bytes_received":        fmt.Sprintf("%.3f MBytes", float64(bytes_received)/1000000.0),
+		"last_received_data_at": time.Duration(flow_throughputs[bytes_received]) * time.Millisecond,
+		"time_elapsed":          elapsed(start) / 1000,
+		"throughput":            fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[bytes_received], bytes_received)),
+	}).Info("Finished Trial")
+
+	// close the connection to the TCP server and listening on UDP port
+	conn.Close()
+	receiver.Close()
+	//log.Info("Ending connection and putting in timestamps")
+	flow_times[config.END] = last_received_time
 	end_ch <- time.Time{} // can stop sending pings
 	return flow_throughputs, flow_times, timed_out
 }
@@ -370,19 +355,19 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 	return rtt_dict
 }
 
-func runExperiment(f func(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time, num_cycles int) ([]results.BytesTimeMap, []results.OnOffMap, bool), IP string, alg string, report *results.CCResults, protocol string, port string, num_cycles int) bool {
+func runExperiment(f func(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time, num_cycles int, cycle int) (results.BytesTimeMap, results.OnOffMap, bool), IP string, alg string, report *results.CCResults, protocol string, port string, num_cycles int, cycle int) bool {
 	var wg sync.WaitGroup
 	start_ping := make(chan time.Time)
 	end_ping := make(chan time.Time)
-	throughput := make([]results.BytesTimeMap, num_cycles)
-	flow_times := make([]results.OnOffMap, num_cycles)
+	throughput := make(results.BytesTimeMap)
+	flow_times := make(results.OnOffMap)
 	ping_results := results.TimeRTTMap{}
 	timed_out := false
 
 	wg.Add(1)
 	go func(wg *sync.WaitGroup) {
 		defer wg.Done()
-		throughput, flow_times, timed_out = f(IP, alg, start_ping, end_ping, num_cycles)
+		throughput, flow_times, timed_out = f(IP, alg, start_ping, end_ping, num_cycles, cycle)
 	}(&wg)
 
 	wg.Add(1)
@@ -394,9 +379,9 @@ func runExperiment(f func(server_ip string, alg string, start_ch chan time.Time,
 	wg.Wait()
 
 	if !timed_out {
-		report.Throughput[alg] = throughput
-		report.FlowTimes[alg] = flow_times
-		report.Delay[alg] = ping_results
+		report.Throughput[alg][cycle] = throughput
+		report.FlowTimes[alg][cycle] = flow_times
+		report.Delay[alg][cycle] = ping_results
 	}
 	return timed_out
 
@@ -456,26 +441,37 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 		ServerIP:   IP,
 		ClientIP:   client_ip,
 		Throughput: make(map[string]([]results.BytesTimeMap)),
-		Delay:      make(map[string]results.TimeRTTMap),
+		Delay:      make(map[string][]results.TimeRTTMap),
 		FlowTimes:  make(map[string][]results.OnOffMap)}
-
 	for _, alg := range algs {
-		alg_line_split := strings.Split(alg, "-")
-		proto := strings.ToLower(alg_line_split[0])
-		alg := strings.ToLower(strings.Join(alg_line_split[1:], "-"))
-		log.WithFields(log.Fields{"alg": alg}).Info("Alg is")
-		log.WithFields(log.Fields{"alg": alg, "proto": proto, "server": IP}).Info(fmt.Sprintf("Starting Experiment %d of %d", place+1, total_experiments))
+		report.Throughput[alg] = make([]results.BytesTimeMap, num_cycles)
+		report.Delay[alg] = make([]results.TimeRTTMap, num_cycles)
+		report.FlowTimes[alg] = make([]results.OnOffMap, num_cycles)
+	}
+	// have loop for cycles here
+	cycle := 0
+	for cycle < num_cycles {
+		// loop through each algorithm
+		for _, alg := range algs {
+			alg_line_split := strings.Split(alg, "-")
+			proto := strings.ToLower(alg_line_split[0])
+			alg := strings.ToLower(strings.Join(alg_line_split[1:], "-"))
+			log.WithFields(log.Fields{"alg": alg}).Info("Alg is")
+			log.WithFields(log.Fields{"alg": alg, "proto": proto, "server": IP}).Info(fmt.Sprintf("Starting Experiment %d of %d", place+1, total_experiments))
 
-		if proto == "tcp" {
-			runExperiment(measureTCP2, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, num_cycles)
-		} else if proto == "udp" {
-			runExperiment(measureUDP2, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, num_cycles)
-		} else {
-			log.Error("Unknown protocol!")
+			if proto == "tcp" {
+				runExperiment(measureTCP2, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, num_cycles, cycle)
+			} else if proto == "udp" {
+				runExperiment(measureUDP2, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, num_cycles, cycle)
+			} else {
+				log.Error("Unknown protocol!")
+			}
+
+			place += 1
+
 		}
 
-		place += 1
-
+		cycle++
 	}
 
 	// print the reports
