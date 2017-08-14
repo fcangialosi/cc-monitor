@@ -105,9 +105,12 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 			continue
 		}
 
+		// set first deadline for 30 seconds, then 30 seconds after
+		started_flow := false
+		conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 		for {
 			//log.Info("Waiting to read")
-			conn.SetReadDeadline(time.Now().Add(config.TCP_TIMEOUT * time.Second))
+
 			n, err := conn.Read(recvBuf)
 			//log.Info("read")
 
@@ -120,16 +123,22 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 				log.Error(err)
 			}
 
+			if !started_flow {
+				started_flow = true
+				conn.SetReadDeadline(time.Now().Add(30 * time.Second)) // connection should end 30 seconds from now
+			}
+
 			bytes_received += uint32(n)
 			last_received_time = elapsed(original_start)
 			measureThroughput(start, bytes_received, flow_throughputs[current_flow])
 
 		}
 		log.WithFields(log.Fields{
-			"trial":          current_flow + 1,
-			"bytes_received": fmt.Sprintf("%.3f MBytes", float64(bytes_received)/1000000.0),
-			"time_elapsed":   time.Duration(flow_throughputs[current_flow][bytes_received]) * time.Millisecond,
-			"throughput":     fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[current_flow][bytes_received], bytes_received)),
+			"trial":                 current_flow + 1,
+			"bytes_received":        fmt.Sprintf("%.3f MBytes", float64(bytes_received)/1000000.0),
+			"last_received_data_at": time.Duration(flow_throughputs[current_flow][bytes_received]) * time.Millisecond,
+			"time_elapsed":          elapsed(start) / 1000,
+			"throughput":            fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[current_flow][bytes_received], bytes_received)),
 		}).Info("Finished Trial")
 
 		flow_times[current_flow][config.END] = last_received_time
@@ -257,10 +266,11 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 		}
 		log.WithFields(log.Fields{
-			"trial":          flow + 1,
-			"bytes_received": fmt.Sprintf("%.3f MBytes", float64(bytes_received)/1000000.0),
-			"time_elapsed":   time.Duration(flow_throughputs[flow][bytes_received]) * time.Millisecond,
-			"throughput":     fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[flow][bytes_received], bytes_received)),
+			"trial":                 flow + 1,
+			"bytes_received":        fmt.Sprintf("%.3f MBytes", float64(bytes_received)/1000000.0),
+			"last_received_data_at": time.Duration(flow_throughputs[flow][bytes_received]) * time.Millisecond,
+			"time_elapsed":          elapsed(start) / 1000,
+			"throughput":            fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[flow][bytes_received], bytes_received)),
 		}).Info("Finished Trial")
 
 		// close the connection to the TCP server and listening on UDP port
@@ -455,6 +465,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 		alg_line_split := strings.Split(alg, "-")
 		proto := strings.ToLower(alg_line_split[0])
 		alg := strings.ToLower(strings.Join(alg_line_split[1:], "-"))
+		log.WithFields(log.Fields{"alg": alg}).Info("Alg is")
 		log.WithFields(log.Fields{"alg": alg, "proto": proto, "server": IP}).Info(fmt.Sprintf("Starting Experiment %d of %d", place+1, total_experiments))
 
 		if proto == "tcp" {
