@@ -107,7 +107,7 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 		// set first deadline for 30 seconds, then 30 seconds after
 		started_flow := false
-		conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+		conn.SetReadDeadline(time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second))
 		for {
 			//log.Info("Waiting to read")
 
@@ -231,12 +231,10 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		last_received_time := flow_start
 		flow_times[flow][config.START] = flow_start
 		started_flow := false
+		// initial timeout -> 30 Seconds
+		receiver.SetReadDeadline(time.Now().Add(config.MINUTE_TIMEOUT * time.Second))
+
 		for {
-			timeout := config.CLIENT_TIMEOUT * time.Second
-			if !started_flow {
-				timeout = config.MINUTE_TIMEOUT * time.Second
-			}
-			receiver.SetReadDeadline(time.Now().Add(timeout)) // long timeout
 			//log.Info("Waiting to read back on the socket")
 			n, raddr, err := receiver.ReadFromUDP(recvBuf)
 			//log.Info("read on the socket")
@@ -250,6 +248,11 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 			if ReadHeaderVal(recvBuf, config.SEQNUM_START, config.SEQNUM_END, binary.LittleEndian) == -1 {
 				//log.Info("Read start flow packet")
 				started_flow = true
+			}
+
+			if !started_flow {
+				started_flow = true
+				receiver.SetReadDeadline(time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second)) // should be done 30 seconds from now
 			}
 
 			bytes_received += uint32(n)
