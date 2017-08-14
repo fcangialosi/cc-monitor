@@ -108,7 +108,7 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		//log.Info("read")
 
 		if err == io.EOF || n <= 0 {
-			log.Warn("Server closed connection")
+			//log.Warn("Server closed connection")
 			break
 		} else if err, ok := err.(net.Error); ok && err.Timeout() {
 			break
@@ -232,7 +232,6 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 		if ReadHeaderVal(recvBuf, config.SEQNUM_START, config.SEQNUM_END, binary.LittleEndian) == -1 {
 			//log.Info("Read start flow packet")
-			log.WithFields(log.Fields{"time now": elapsed(start) / 1000}).Info("Starting 30 second timer")
 			receiver.SetReadDeadline(time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second)) // should be done 30 seconds from now
 		}
 
@@ -379,9 +378,9 @@ func runExperiment(f func(server_ip string, alg string, start_ch chan time.Time,
 	wg.Wait()
 
 	if !timed_out {
-		report.Throughput[alg] = append(report.Throughput[alg], throughput)
-		report.FlowTimes[alg] = append(report.FlowTimes[alg], flow_times)
-		report.Delay[alg] = append(report.Delay[alg], ping_results)
+		report.Throughput[alg][cycle] = throughput
+		report.FlowTimes[alg][cycle] = flow_times
+		report.Delay[alg][cycle] = ping_results
 	}
 	return timed_out
 
@@ -443,8 +442,8 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 		Throughput: make(map[string]([]results.BytesTimeMap)),
 		Delay:      make(map[string][]results.TimeRTTMap),
 		FlowTimes:  make(map[string][]results.OnOffMap)}
-	for _, alg := range algs {
-
+	for _, full_alg := range algs {
+		alg := strings.SplitN(full_alg, "-", 2)[1]
 		report.Throughput[alg] = make([]results.BytesTimeMap, num_cycles)
 		report.Delay[alg] = make([]results.TimeRTTMap, num_cycles)
 		report.FlowTimes[alg] = make([]results.OnOffMap, num_cycles)
@@ -457,7 +456,6 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 			alg_line_split := strings.Split(alg, "-")
 			proto := strings.ToLower(alg_line_split[0])
 			alg := strings.ToLower(strings.Join(alg_line_split[1:], "-"))
-			log.WithFields(log.Fields{"alg": alg}).Info("Alg is")
 			log.WithFields(log.Fields{"alg": alg, "proto": proto, "server": IP}).Info(fmt.Sprintf("Starting Experiment %d of %d", place+1, total_experiments))
 
 			if proto == "tcp" {
@@ -527,7 +525,7 @@ func main() {
 		total_experiments := 0
 		place := 0
 		for _, val := range ip_map {
-			total_experiments += len(val)
+			total_experiments += len(val) * num_cycles
 		}
 		for IP, val := range ip_map {
 			log.WithFields(log.Fields{"ip": IP}).Info(fmt.Sprintf("Contacting Server %d/%d ", count, len(ip_map)))
