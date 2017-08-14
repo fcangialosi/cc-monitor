@@ -230,7 +230,6 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		flow_start := float32(start.Sub(original_start).Seconds() * 1000)
 		last_received_time := flow_start
 		flow_times[flow][config.START] = flow_start
-		started_flow := false
 		// initial timeout -> 30 Seconds
 		receiver.SetReadDeadline(time.Now().Add(config.MINUTE_TIMEOUT * time.Second))
 
@@ -247,11 +246,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 			if ReadHeaderVal(recvBuf, config.SEQNUM_START, config.SEQNUM_END, binary.LittleEndian) == -1 {
 				//log.Info("Read start flow packet")
-				started_flow = true
-			}
-
-			if !started_flow {
-				started_flow = true
+				log.WithFields(log.Fields{"time now": elapsed(start) / 1000}).Info("Starting 30 second timer")
 				receiver.SetReadDeadline(time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second)) // should be done 30 seconds from now
 			}
 
