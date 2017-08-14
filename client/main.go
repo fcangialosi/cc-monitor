@@ -361,7 +361,7 @@ func runExperiment(f func(server_ip string, alg string, start_ch chan time.Time,
 	end_ping := make(chan time.Time)
 	throughput := make(results.BytesTimeMap)
 	flow_times := make(results.OnOffMap)
-	ping_results := results.TimeRTTMap{}
+	ping_results := make(results.TimeRTTMap)
 	timed_out := false
 
 	wg.Add(1)
@@ -379,9 +379,9 @@ func runExperiment(f func(server_ip string, alg string, start_ch chan time.Time,
 	wg.Wait()
 
 	if !timed_out {
-		report.Throughput[alg][cycle] = throughput
-		report.FlowTimes[alg][cycle] = flow_times
-		report.Delay[alg][cycle] = ping_results
+		report.Throughput[alg] = append(report.Throughput[alg], throughput)
+		report.FlowTimes[alg] = append(report.FlowTimes[alg], flow_times)
+		report.Delay[alg] = append(report.Delay[alg], ping_results)
 	}
 	return timed_out
 
@@ -444,6 +444,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 		Delay:      make(map[string][]results.TimeRTTMap),
 		FlowTimes:  make(map[string][]results.OnOffMap)}
 	for _, alg := range algs {
+
 		report.Throughput[alg] = make([]results.BytesTimeMap, num_cycles)
 		report.Delay[alg] = make([]results.TimeRTTMap, num_cycles)
 		report.FlowTimes[alg] = make([]results.OnOffMap, num_cycles)
@@ -460,9 +461,9 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 			log.WithFields(log.Fields{"alg": alg, "proto": proto, "server": IP}).Info(fmt.Sprintf("Starting Experiment %d of %d", place+1, total_experiments))
 
 			if proto == "tcp" {
-				runExperiment(measureTCP2, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, num_cycles, cycle)
+				runExperiment(measureTCP2, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, 1, cycle)
 			} else if proto == "udp" {
-				runExperiment(measureUDP2, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, num_cycles, cycle)
+				runExperiment(measureUDP2, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, 1, cycle)
 			} else {
 				log.Error("Unknown protocol!")
 			}
