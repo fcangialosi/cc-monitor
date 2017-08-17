@@ -329,13 +329,18 @@ sendloop:
 					continue
 				}
 				rtt := (recv_timestamp - send_timestamp)
-				log.Info(rtt)
 				rtt_dict[send_timestamp] = rtt
 				break recvloop
 			}
 		}
 	}
-	log.Info("done")
+
+	avg_delay := float32(0)
+	for _, rtt := range rtt_dict {
+		avg_delay += rtt
+	}
+	avg_delay /= float32(len(rtt_dict))
+	log.WithFields(log.Fields{"avg_delay_ms": avg_delay}).Info()
 	return rtt_dict
 
 	/*
