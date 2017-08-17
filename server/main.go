@@ -71,17 +71,6 @@ func openUDPServer() {
 			// SYN-ACK
 			conn.Write([]byte(srcport)) // TCP handles reliability
 
-			// wait for ACK from client
-			n, err = conn.Read(reqbuf)
-			if err != nil {
-				log.Warn(err)
-			}
-			if string(reqbuf[:n]) != config.ACK {
-				log.Warn("Did not receive ack after sending client src port")
-				return
-			} else {
-				log.Info("Read ack")
-			}
 			clientIPPort := conn.RemoteAddr().String()
 			clientIP := strings.Split(clientIPPort, ":")[0] // of form IP:port
 			log.WithFields(log.Fields{"client ip": clientIP}).Info("client IP")
