@@ -287,91 +287,102 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 /*Starts a ping chain - stops when the other goroutine sends a message over a channel*/
 func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time, protocol string, port string) results.TimeRTTMap {
-	//log.Info("entering the send ping function")
+
 	rtt_dict := results.TimeRTTMap{}
-	pingBuf := make([]byte, config.PING_SIZE_BYTES)
-	if protocol == config.UDP {
 
-		// create tcp connection to the server
-		// TODO this should probably use tcp/udp depending on which algorithm is running
-		// TODO but need to support this on the server as well, for now just udp
-		// conn, err := net.Dial("udp", config.SERVER_IP+":"+config.PING_SERVER_PORT)
-		// CheckError(err)
-		// defer conn.Close()
-		var mutex = &sync.Mutex{}
+	start := <-start_ch
 
-		// wait for measurement to start
-		//log.Info("waiting to receive go in ping function")
-		start := <-start_ch
-		//log.Info("Got start to send pings")
-	sendloop:
+	// TODO add a timeout for this
+	conn, err := net.Dial(protocol, server_ip+":"+port)
+	if CheckError(err) {
+		log.Warn("Error creating connection for pings", err)
+		<-end_ch
+		return rtt_dict
+	}
+	defer conn.Close()
+
+	i := 0
+sendloop:
+	for {
+		recvBuf := make([]byte, config.PING_SIZE_BYTES)
+		send_timestamp := elapsed(start)
+		conn.Write([]byte(strconv.Itoa(i)))
+	recvloop:
 		for {
 			select {
 			case <-end_ch:
-				//log.Warn("Got signal to end pings")
 				break sendloop
 			default:
-				go func(m results.TimeRTTMap) {
-
-					recvBuf := make([]byte, config.PING_SIZE_BYTES)
-					c, err := net.Dial(protocol, server_ip+":"+port)
-					if CheckError(err) {
-						return
+				conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+				n, err := conn.Read(recvBuf)
+				recv_timestamp := elapsed(start)
+				if err != nil || n <= 0 {
+					if err, ok := err.(net.Error); ok && !err.Timeout() {
+						log.Warn("error reading pings", err)
 					}
-					defer c.Close()
-					//log.Info("Waiting to write ping")
-					send_timestamp := elapsed(start)
-					c.Write(pingBuf)
-					//log.Info("Waiting to read from ping buf")
-					_, err = c.Read(recvBuf)
-					recv_timestamp := elapsed(start)
-					if CheckError(err) {
-						return
-					}
-					rtt := (recv_timestamp - send_timestamp)
-					mutex.Lock()
-					m[send_timestamp] = rtt
-					mutex.Unlock()
-				}(rtt_dict)
-			}
-			time.Sleep(time.Millisecond * 500)
-		}
-	} else { // tcp connection
-		conn, err := net.Dial("tcp", server_ip+":"+port)
-		if CheckError(err) {
-			return rtt_dict
-		}
-		defer conn.Close()
-
-		start := <-start_ch // wait for start
-		//log.WithFields(log.Fields{"original start": start}).Info("TCP ping times")
-
-		i := 0
-	sendloop_tcp:
-		for {
-			select {
-			case <-end_ch:
-				//log.Debug("Got signal to end pings")
-				break sendloop_tcp
-			default:
-				recvBuf := make([]byte, config.PING_SIZE_BYTES)
-				send_timestamp := elapsed(start)
-				//log.WithFields(log.Fields{"send time": send_timestamp, "i": i}).Info("TCP-ping send time")
-				conn.Write([]byte(strconv.Itoa(i)))
-				_, err = conn.Read(recvBuf)
-				if CheckErrMsg(err, "read on tcp pings") {
 					continue
 				}
-				recv_timestamp := elapsed(start)
 				rtt := (recv_timestamp - send_timestamp)
-				//log.WithFields(log.Fields{"recv time": recv_timestamp, "rtt": rtt, "bytes": n, "buf": string(recvBuf[:n])}).Info("TCP ping times")
+				log.Info(rtt)
 				rtt_dict[send_timestamp] = rtt
+				break recvloop
 			}
-			time.Sleep(time.Millisecond * 500)
-			i += 1
 		}
 	}
+	log.Info("done")
 	return rtt_dict
+
+	/*
+				go func(conn net.Conn, end_ch chan time.Time) {
+				sendloop:
+					for {
+						select {
+						case <-end_ch:
+							break sendloop
+						default:
+							send_timestamp := elapsed(start)
+							payload := strconv.FormatFloat(float64(send_timestamp), 'f', -1, 32) + " "
+							conn.Write([]byte(payload))
+						}
+						time.Sleep(time.Millisecond * config.PING_INTERSEND_MS)
+					}
+				}(conn, end_ch)
+
+			recvloop:
+				for {
+					select {
+					case <-end_ch:
+						break recvloop
+					default:
+						recvBuf := make([]byte, config.PING_SIZE_BYTES)
+						conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+						n, err := conn.Read(recvBuf)
+						recv_timestamp := elapsed(start)
+						if err != nil || n <= 0 {
+							if err, ok := err.(net.Error); ok && !err.Timeout() {
+								log.Warn("error reading pings", err)
+							}
+							continue
+						}
+						log.Info(string(recvBuf[:n]))
+						for _, pkt := range strings.Split(string(recvBuf[:n]), " ") {
+							if len(pkt) <= 0 {
+								continue
+							}
+							payload, err := strconv.ParseFloat(pkt, 32)
+							if CheckErrMsg(err, "unable to parse send timestamp in ping") {
+								continue
+							}
+							send_timestamp := float32(payload)
+							rtt := (recv_timestamp - send_timestamp)
+							log.Info(rtt)
+							rtt_dict[send_timestamp] = rtt
+						}
+					}
+				}
+		return rtt_dict
+	*/
+
 }
 
 func runExperiment(f func(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time, num_cycles int, cycle int) (results.BytesTimeMap, results.OnOffMap, bool), IP string, alg string, report *results.CCResults, protocol string, port string, num_cycles int, cycle int) bool {

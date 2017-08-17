@@ -32,6 +32,7 @@ const CLIENT_UDP_PORT = "9876"
 
 // Ping server constants
 const PING_SIZE_BYTES = 1492
+const PING_INTERSEND_MS = 500
 
 // Measure server constants
 const LARGE_BUF_SIZE = 4096
