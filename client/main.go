@@ -100,7 +100,11 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 	// set first deadline for 30 seconds, then 30 seconds after
 	started_flow := false
-	conn.SetReadDeadline(time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second))
+	dline := time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second)
+	conn.SetReadDeadline(dline)
+	log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
+	//conn.SetReadDeadline(time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second))
+
 	for {
 		//log.Info("Waiting to read")
 
@@ -111,6 +115,7 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 			//log.Warn("Server closed connection")
 			break
 		} else if err, ok := err.(net.Error); ok && err.Timeout() {
+			log.Warn("timeout")
 			break
 		} else if err != nil {
 			log.Error(err)
@@ -118,7 +123,10 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 		if !started_flow {
 			started_flow = true
-			conn.SetReadDeadline(time.Now().Add(30 * time.Second)) // connection should end 30 seconds from now
+			dline := time.Now().Add(30 * time.Second)
+			conn.SetReadDeadline(dline)
+			log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
+			//conn.SetReadDeadline(time.Now().Add(30 * time.Second)) // connection should end 30 seconds from now
 		}
 
 		bytes_received += uint32(n)
@@ -204,12 +212,17 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	flow_times[config.START] = flow_start
 
 	// loop of punching NAT and waiting for a response
+	log.Info("trying to punch NAT and establish connection")
 	for {
 		receiver.WriteToUDP([]byte("open seasame"), gccAddr) // just send, ifnore any errors
-		receiver.SetReadDeadline(time.Now().Add(config.MINUTE_TIMEOUT / 6 * time.Second))
+		dline := time.Now().Add(config.HALF_MINUTE_TIMEOUT / 6 * time.Second)
+		receiver.SetReadDeadline(dline)
+		log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
+		//receiver.SetReadDeadline(time.Now().Add(config.MINUTE_TIMEOUT / 6 * time.Second))
 		n, raddr, err := receiver.ReadFromUDP(recvBuf)
 		if err != nil {
 			if err, ok := err.(net.Error); ok && err.Timeout() {
+				log.Warn("timeout, trying to initiate again...")
 				continue
 			} else {
 				log.Info("Error when punching NAT: ", err)
@@ -236,12 +249,16 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	}
 
 	// initial timeout -> 30 Seconds
-	receiver.SetReadDeadline(time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second))
+	dline := time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second)
+	receiver.SetReadDeadline(dline)
+	log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
+	//receiver.SetReadDeadline(time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second))
 
 	for {
 		n, raddr, err := receiver.ReadFromUDP(recvBuf)
 
 		if err, ok := err.(net.Error); ok && err.Timeout() {
+			log.Warn("timeout")
 			break
 		} else if err == io.EOF {
 			break
