@@ -69,6 +69,7 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 	original_start := time.Now()
 	start_ch <- original_start // start pings now
+	defer func() { end_ch <- time.Time{} }()
 
 	// loop over each cycle and request TCP server for "1" on and off
 	last_received_time := float32(0)
@@ -79,7 +80,6 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	conn, err := net.Dial("tcp", server_ip+":"+config.MEASURE_SERVER_PORT)
 	if CheckErrMsg(err, "tcp connection to server") {
 		time.Sleep(2 * time.Second)
-		end_ch <- time.Time{} // can stop sending pings
 		return flow_throughputs, flow_times, true
 	}
 	conn.Write([]byte(alg))
@@ -94,7 +94,6 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	conn.Write([]byte(config.ACK))
 	if CheckErrMsg(err, "opening TCP connection") {
 		time.Sleep(2 * time.Second)
-		end_ch <- time.Time{} // can stop sending pings
 		return flow_throughputs, flow_times, true
 	}
 
@@ -145,7 +144,6 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	flow_times[config.END] = last_received_time
 	conn.Close() // close connection before next one
 
-	end_ch <- time.Time{} // can stop sending pings
 	return flow_throughputs, flow_times, false
 
 }
@@ -160,6 +158,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	// send start to ping channel
 	original_start := time.Now()
 	start_ch <- original_start
+	defer func() { end_ch <- time.Time{} }()
 
 	// for each flow, start a separate connection to the server to spawn genericCC
 	bytes_received := uint32(0)
@@ -170,9 +169,9 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	conn, err := net.Dial("tcp", server_ip+":"+config.OPEN_UDP_PORT)
 	if CheckErrMsg(err, "Open TCP connection to get genericCC port number") {
 		time.Sleep(2 * time.Second)
-		end_ch <- time.Time{} // can stop sending pings
 		return flow_throughputs, flow_times, true
 	}
+	defer conn.Close()
 
 	// create UDP listening port
 	srcport := strconv.Itoa((9876 - cycle))
@@ -182,7 +181,6 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	n, err := conn.Read(recvBuf)
 	if CheckErrMsg(err, "Trying to receive port number from genericCC") {
 		time.Sleep(2 * time.Second)
-		end_ch <- time.Time{} // can stop sending pings
 		return flow_throughputs, flow_times, true
 	}
 	gccPort := string(recvBuf[:n])
@@ -190,20 +188,18 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 	laddr, err := net.ResolveUDPAddr("udp", ":"+srcport) // listen at a known port for later udp messages
 	if CheckErrMsg(err, "creating laddr") {
-		end_ch <- time.Time{} // can stop sending pings
 		return flow_throughputs, flow_times, true
 	}
 
 	receiver, err := net.ListenUDP("udp", laddr)
 	if CheckErrMsg(err, "error on creating receiver for listen UDP") {
-		end_ch <- time.Time{} // can stop sending pings
 		return flow_throughputs, flow_times, true
 	}
+	defer receiver.Close()
 
 	// start listening for genericCC
 	gccAddr, err := net.ResolveUDPAddr("udp", server_ip+":"+gccPort)
 	if CheckErrMsg(err, "resolving addr to generic CC port given") {
-		end_ch <- time.Time{} // can stop sending pings
 		return flow_throughputs, flow_times, true
 	}
 	start := time.Now()
@@ -226,7 +222,6 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 				continue
 			} else {
 				log.Info("Error when punching NAT: ", err)
-				end_ch <- time.Time{} // can stop sending pings
 				return flow_throughputs, flow_times, true
 			}
 		}
@@ -285,12 +280,8 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		"throughput":            fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[bytes_received], bytes_received)),
 	}).Info("Finished Trial")
 
-	// close the connection to the TCP server and listening on UDP port
-	conn.Close()
-	receiver.Close()
 	//log.Info("Ending connection and putting in timestamps")
 	flow_times[config.END] = last_received_time
-	end_ch <- time.Time{} // can stop sending pings
 	return flow_throughputs, flow_times, timed_out
 }
 
