@@ -165,6 +165,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		end_ch <- time.Time{} // can stop sending pings
 		return flow_throughputs, flow_times, true
 	}
+
 	// create UDP listening port
 	srcport := strconv.Itoa((9876 - cycle))
 	conn.Write([]byte(alg + "->" + srcport)) // write remy
@@ -197,42 +198,53 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		end_ch <- time.Time{} // can stop sending pings
 		return flow_throughputs, flow_times, true
 	}
-
-	// punch hole in NAT for genericCC
-	_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
-	_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
-	_, err = receiver.WriteToUDP([]byte("open seasame"), gccAddr) // this could error but that's ok
-	if CheckErrMsg(err, "Punching NAT for genericCC") {
-		time.Sleep(2 * time.Second)
-		end_ch <- time.Time{} // can stop sending pings
-		return flow_throughputs, flow_times, true
-	}
-	//log.Info("Open Sesame!: ", gccAddr)
-
-	// write ACK to server to server can start genericCC
-	conn.Write([]byte(config.ACK))
-
 	start := time.Now()
 	flow_start := float32(start.Sub(original_start).Seconds() * 1000)
 	last_received_time := flow_start
 	flow_times[config.START] = flow_start
+
+	// loop of punching NAT and waiting for a response
+	for {
+		receiver.WriteToUDP([]byte("open seasame"), gccAddr) // just send, ifnore any errors
+		receiver.SetReadDeadline(time.Now().Add(config.MINUTE_TIMEOUT / 6 * time.Second))
+		n, raddr, err := receiver.ReadFromUDP(recvBuf)
+		if err != nil {
+			if err, ok := err.(net.Error); ok && err.Timeout() {
+				continue
+			} else {
+				log.Info("Error when punching NAT: ", err)
+				end_ch <- time.Time{} // can stop sending pings
+				return flow_throughputs, flow_times, true
+			}
+		}
+		// reset start time
+		log.Info("Received first data from UDP program")
+		start = time.Now()
+		flow_start = float32(start.Sub(original_start).Seconds() * 1000)
+		last_received_time = flow_start
+		flow_times[config.START] = flow_start
+		// send first echo and break
+		if shouldEcho {
+			//log.Info("echo packet")
+			echo := SetHeaderVal(recvBuf[:n], config.RECEIVE_TIMESTAMP_START, binary.LittleEndian, elapsed(start))
+			// TODO can just send back the recvbuf
+			receiver.WriteToUDP(echo.Bytes(), raddr)
+		}
+
+		break
+
+	}
+
 	// initial timeout -> 30 Seconds
-	receiver.SetReadDeadline(time.Now().Add(config.MINUTE_TIMEOUT * time.Second))
+	receiver.SetReadDeadline(time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second))
 
 	for {
-		//log.Info("Waiting to read back on the socket")
 		n, raddr, err := receiver.ReadFromUDP(recvBuf)
-		//log.Info("read on the socket")
 
 		if err, ok := err.(net.Error); ok && err.Timeout() {
 			break
 		} else if err == io.EOF {
 			break
-		}
-
-		if ReadHeaderVal(recvBuf, config.SEQNUM_START, config.SEQNUM_END, binary.LittleEndian) == -1 {
-			//log.Info("Read start flow packet")
-			receiver.SetReadDeadline(time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second)) // should be done 30 seconds from now
 		}
 
 		bytes_received += uint32(n)
@@ -460,6 +472,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 
 			if proto == "tcp" {
 				runExperiment(measureTCP2, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, 1, cycle)
+				//runExperiment(measureUDP2, IP, "remy=bigbertha-100x.dna.5", &report, "udp", config.PING_TCP_SERVER_PORT, 1, cycle)
 			} else if proto == "udp" {
 				runExperiment(measureUDP2, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, 1, cycle)
 			} else {
@@ -515,10 +528,15 @@ func main() {
 	// bootstrap -- ask one known server for a list of other server IP
 	if false {
 		mahimahi := os.Getenv("MAHIMAHI_BASE")
-		algs := []string{"remy=bigbertha-100x.dna.5", "cubic"}
-		runExperimentOnMachine(mahimahi, algs, config.NUM_CYCLES, 0, len(algs))
+		algs := []string{"udp-remy=bigbertha-100x.dna.5"}
+		runExperimentOnMachine(mahimahi, algs, 2, 0, len(algs)*2)
 	} else {
+		// algs := []string{"udp-remy=bigbertha-100x.dna.5"}
 		ip_map, num_cycles := getIPS()
+		// ip_map := make(map[string][]string)
+		// ip_map["35.176.36.156"] = algs
+		// ip_map["54.179.168.237"] = algs
+		// num_cycles := 5
 		sendMap := make(map[string]string) // maps IPs to times the report was sent
 		log.Info("This script will contact different servers to transfer data using different congestion control algorithms, and records data about the performance of each algorithm. It may take around 10 minutes. We're trying to guage the performance of an algorithm designed by Remy, a program that automatically generates congestion control algorithms based on input parameters.")
 		count := 1
