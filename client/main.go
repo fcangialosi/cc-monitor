@@ -209,6 +209,8 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 	// loop of punching NAT and waiting for a response
 	log.Info("trying to punch NAT and establish connection")
+
+	attempts := 1
 	for {
 		receiver.WriteToUDP([]byte("open seasame"), gccAddr) // just send, ifnore any errors
 		dline := time.Now().Add(config.HALF_MINUTE_TIMEOUT / 6 * time.Second)
@@ -218,8 +220,12 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		n, raddr, err := receiver.ReadFromUDP(recvBuf)
 		if err != nil {
 			if err, ok := err.(net.Error); ok && err.Timeout() {
-				log.Warn("timeout, trying to initiate again...")
-				continue
+				if attempts < config.MAX_CONNECT_ATTEMPTS {
+					log.Warn("timeout, trying to initiate again...")
+					continue
+				} else {
+					return flow_throughputs, flow_times, true
+				}
 			} else {
 				log.Info("Error when punching NAT: ", err)
 				return flow_throughputs, flow_times, true
