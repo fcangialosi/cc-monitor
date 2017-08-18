@@ -231,6 +231,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 				log.Info("Error when punching NAT: ", err)
 				return flow_throughputs, flow_times, true
 			}
+
 		}
 		// reset start time
 		log.Info("Received first data from UDP program")
@@ -298,6 +299,56 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 	rtt_dict := results.TimeRTTMap{}
 
 	start := <-start_ch
+
+	// if protocol is UDP -> use separate connections in goroutine
+	if protocol == "udp" {
+		var mutex = &sync.Mutex{}
+	udpSendloop:
+		for {
+			select {
+			case <-end_ch:
+				break udpSendloop
+			default:
+				go func(m results.TimeRTTMap) {
+					conn, err := net.Dial(protocol, server_ip+":"+port)
+					if err != nil {
+						log.Warn("Non nill error on writing udp pings: ", err)
+						return
+					}
+					defer conn.Close()
+
+					sendTimestamp := elapsed(start)
+					conn.Write([]byte(config.ACK))
+					recvBuf := make([]byte, config.PING_SIZE_BYTES)
+					_, err = conn.Read(recvBuf)
+					recvTimestamp := elapsed(start)
+					if err != nil {
+						log.Warn("Non nil error on udp pings: ", err)
+						return
+					}
+
+					rtt := recvTimestamp - sendTimestamp
+					mutex.Lock()
+					m[sendTimestamp] = rtt
+					mutex.Unlock()
+
+				}(rtt_dict)
+
+			}
+			time.Sleep(time.Millisecond * 500)
+		}
+
+		// broken -> return
+		avg_delay := float32(0)
+		for _, rtt := range rtt_dict {
+			avg_delay += rtt
+		}
+		avg_delay /= float32(len(rtt_dict))
+		log.WithFields(log.Fields{"avg_delay_ms": avg_delay}).Info()
+		return rtt_dict
+	}
+
+	// protocol is TCP
 
 	// TODO add a timeout for this
 	conn, err := net.Dial(protocol, server_ip+":"+port)
