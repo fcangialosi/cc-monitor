@@ -242,7 +242,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		// send first echo and break
 		if shouldEcho {
 			//log.Info("echo packet")
-			echo := SetHeaderVal(recvBuf[:n], config.RECEIVE_TIMESTAMP_START, binary.LittleEndian, elapsed(start))
+			echo := SetHeaderVal(recvBuf[:n], config.RECEIVE_TIMESTAMP_START, binary.LittleEndian, float64(elapsed(start)))
 			// TODO can just send back the recvbuf
 			receiver.WriteToUDP(echo.Bytes(), raddr)
 		}
@@ -274,7 +274,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		// echo packet with receive timestamp
 		if shouldEcho {
 			//log.Info("echo packet")
-			echo := SetHeaderVal(recvBuf[:n], config.RECEIVE_TIMESTAMP_START, binary.LittleEndian, elapsed(start))
+			echo := SetHeaderVal(recvBuf[:n], config.RECEIVE_TIMESTAMP_START, binary.LittleEndian, float64(elapsed(start)))
 			// TODO can just send back the recvbuf
 			receiver.WriteToUDP(echo.Bytes(), raddr)
 		}
