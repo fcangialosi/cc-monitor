@@ -216,6 +216,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		dline := time.Now().Add(config.HALF_MINUTE_TIMEOUT / 6 * time.Second)
 		receiver.SetReadDeadline(dline)
 		log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
+		attempts++
 		//receiver.SetReadDeadline(time.Now().Add(config.MINUTE_TIMEOUT / 6 * time.Second))
 		n, raddr, err := receiver.ReadFromUDP(recvBuf)
 		if err != nil {
