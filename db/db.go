@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 
@@ -15,37 +14,6 @@ import (
 	"../results"
 	log "github.com/sirupsen/logrus"
 )
-
-func getIPList(ip_file string) (results.IPList, int) {
-	ip_list := make(results.IPList)
-	var num_cycles int
-	file, err := os.Open(ip_file)
-	defer file.Close()
-	checkError(err)
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		ip_line := scanner.Text() // line: IP UDP alg1 alg2 TCP alg1 alg2 ....
-		ip_line_split := strings.Split(ip_line, " ")
-		log.Info(ip_line_split)
-		if len(ip_line_split) == 1 {
-			num_cycles, err = strconv.Atoi(ip_line_split[0])
-			if err != nil {
-				log.WithFields(log.Fields{"err": err}).Error("error reading num_cycles")
-			}
-			continue
-		}
-		ip := ip_line_split[0]
-		algs := make([]string, 0)
-		for _, val := range ip_line_split[2:] { // first val is IP, 2nd val is location
-			algs = append(algs, val)
-		}
-
-		ip_list[ip] = algs
-		log.WithFields(log.Fields{"IP": ip, "algs": algs}).Info("IP LIST")
-	}
-	checkError(scanner.Err())
-	return ip_list, num_cycles
-}
 
 func getIPLocation(ip_file string, input_ip string) string {
 	file, err := os.Open(ip_file)
@@ -86,7 +54,7 @@ func introServer(ip_file string) {
 		go func(c *net.TCPConn) {
 			p := make([]byte, config.LARGE_BUF_SIZE)
 			defer conn.Close()
-			ip_list, num_cycles := getIPList(ip_file)
+			ip_list, num_cycles := results.GetIPList(ip_file)
 			// send it back to the server
 			conn.Read(p)
 			conn.Write(results.EncodeIPList(ip_list, num_cycles))
@@ -174,40 +142,40 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 			_, err = f.Write(b)
 			checkErrMsg(err, "writing bytes to file")
 
-      // make the graph -> name it according to the time and location
-      graph_title := fmt.Sprintf("Transfer_to_%s_AWS", location)
-      graph_location := fmt.Sprintf("%s_%s", current_time, location)
-      graph_directory := fmt.Sprintf("%s/%s/%s/%s", config.PATH_TO_GRAPH_RESULTS, server_file, current_date,current_time)
-      err = os.MkdirAll(graph_directory, 0777)
+			// make the graph -> name it according to the time and location
+			graph_title := fmt.Sprintf("Transfer_to_%s_AWS", location)
+			graph_location := fmt.Sprintf("%s_%s", current_time, location)
+			graph_directory := fmt.Sprintf("%s/%s/%s/%s", config.PATH_TO_GRAPH_RESULTS, server_file, current_date, current_time)
+			err = os.MkdirAll(graph_directory, 0777)
 			if err != nil {
 				log.WithFields(log.Fields{"err": err, "path": path}).Panic("Creating graph path to store results")
 			}
 
-      args := []string{full_path, graph_location, graph_title, graph_directory}
-      cmd := exec.Command(config.PATH_TO_GRAPH_SCRIPT, args...) // graphing scripts  moves the image to file with the python web server running
-      cmd.Stdout = os.Stdout
-      if err = cmd.Run(); err != nil {
-        log.Info("Error in running graphing script")
-        log.Error(err)
-      }
+			args := []string{full_path, graph_location, graph_title, graph_directory}
+			cmd := exec.Command(config.PATH_TO_GRAPH_SCRIPT, args...) // graphing scripts  moves the image to file with the python web server running
+			cmd.Stdout = os.Stdout
+			if err = cmd.Run(); err != nil {
+				log.Info("Error in running graphing script")
+				log.Error(err)
+			}
 
-      // now make the throughput graph for each of the algorithms
-      for alg, _ := range rep.Throughput {
-        log.Info("Alg is ", alg)
-        // log for graphing script
-        title := fmt.Sprintf("%s_Throughput", alg)
-        thr_log := fmt.Sprintf("%s_%s", alg, graph_location)
-        outfile := fmt.Sprintf("%s_throughput", alg)
-        graph_args := []string{thr_log, outfile, title, graph_directory}
-        log.Info(graph_args)
+			// now make the throughput graph for each of the algorithms
+			for alg, _ := range rep.Throughput {
+				log.Info("Alg is ", alg)
+				// log for graphing script
+				title := fmt.Sprintf("%s_Throughput", alg)
+				thr_log := fmt.Sprintf("%s_%s", alg, graph_location)
+				outfile := fmt.Sprintf("%s_throughput", alg)
+				graph_args := []string{thr_log, outfile, title, graph_directory}
+				log.Info(graph_args)
 
-        cmd = exec.Command(config.PATH_TO_GRAPH_THROUGHPUT_SCRIPT, graph_args...)
-        cmd.Stdout = os.Stdout
-        if err = cmd.Run(); err != nil {
-          log.Info("Error in running graphing script for throughput graphs")
-          log.Error(err)
-        }
-      }
+				cmd = exec.Command(config.PATH_TO_GRAPH_THROUGHPUT_SCRIPT, graph_args...)
+				cmd.Stdout = os.Stdout
+				if err = cmd.Run(); err != nil {
+					log.Info("Error in running graphing script for throughput graphs")
+					log.Error(err)
+				}
+			}
 		}(report)
 
 	}
@@ -248,11 +216,11 @@ func getGraphInfo(ip_file string) {
 				server_file = fmt.Sprintf("%s_logs", location)
 			}
 			path := fmt.Sprintf("%s/%s/%s", server_file, current_date, current_time)
-      // find the correct URL and return
-      URL := config.URL_PREFIX + "/" + path
-      conn.Write([]byte(URL))
-    }(conn)
-  }
+			// find the correct URL and return
+			URL := config.URL_PREFIX + "/" + path
+			conn.Write([]byte(URL))
+		}(conn)
+	}
 }
 
 func currentDate() string {
@@ -288,7 +256,7 @@ func main() {
 	elapsed_ms := elapsed.Seconds() * float64(time.Second/time.Millisecond)
 	log.WithFields(log.Fields{"elapsed": elapsed_ms}).Info("elapsed time")
 	// get the ip list for tests
-	ip_list, num_cycles := getIPList(config.IP_LIST_LOCATION)
+	ip_list, num_cycles := results.GetIPList(config.IP_LIST_LOCATION)
 	log.WithFields(log.Fields{"num_cycles": num_cycles}).Info(ip_list)
 
 	quit := make(chan struct{})

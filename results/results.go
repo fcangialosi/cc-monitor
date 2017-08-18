@@ -1,9 +1,13 @@
 package results
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"encoding/gob"
+	"os"
+	"strconv"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -164,4 +168,42 @@ func compress_array(input []byte) []byte {
 	log.WithFields(log.Fields{"before": len(input), "after": len(buf.Bytes())})
 	return buf.Bytes()
 
+}
+
+func checkError(err error) {
+	if err != nil {
+		log.Panic(err)
+	}
+}
+
+// TODO move this to a separate package
+func GetIPList(ip_file string) (IPList, int) {
+	ip_list := make(IPList)
+	var num_cycles int
+	file, err := os.Open(ip_file)
+	defer file.Close()
+	checkError(err)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		ip_line := scanner.Text() // line: IP UDP alg1 alg2 TCP alg1 alg2 ....
+		ip_line_split := strings.Split(ip_line, " ")
+		log.Info(ip_line_split)
+		if len(ip_line_split) == 1 {
+			num_cycles, err = strconv.Atoi(ip_line_split[0])
+			if err != nil {
+				log.WithFields(log.Fields{"err": err}).Error("error reading num_cycles")
+			}
+			continue
+		}
+		ip := ip_line_split[0]
+		algs := make([]string, 0)
+		for _, val := range ip_line_split[2:] { // first val is IP, 2nd val is location
+			algs = append(algs, val)
+		}
+
+		ip_list[ip] = algs
+		log.WithFields(log.Fields{"IP": ip, "algs": algs}).Info("Read from IP list")
+	}
+	checkError(scanner.Err())
+	return ip_list, num_cycles
 }

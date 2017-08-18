@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -604,20 +605,41 @@ func getURLFromServer(gg results.GraphInfo) string {
 
 }
 
+var use_mm = flag.Bool("mm", false, "If true, connect to a local server from inside a mahimahi shell")
+var manual_algs = flag.String("algs", "", "Specify a comma-separated list of algorithms to test, e.g. \"tcp-cubic,tcp-reno\"")
+var cycles = flag.Int("cycles", 0, "Specify number of trials for each algorithms")
+var local_iplist = flag.String("iplist", "", "Filename to read ips and algorithms from rather than pulling from server")
+
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
-	// bootstrap -- ask one known server for a list of other server IP
-	if false {
+	flag.Parse()
+	// Default to just Remy and TCP Cubic
+	algs := []string{"udp-remy=bigbertha-100x.dna.5", "tcp-cubic"}
+
+	if *use_mm {
 		mahimahi := os.Getenv("MAHIMAHI_BASE")
-		algs := []string{"udp-remy=bigbertha-100x.dna.5"}
-		runExperimentOnMachine(mahimahi, algs, 2, 0, len(algs)*2)
+		if *manual_algs != "" {
+			algs = strings.Split(*manual_algs, ",")
+		}
+		num_cycles := 2
+		if *cycles != 0 {
+			num_cycles = *cycles
+		}
+		runExperimentOnMachine(mahimahi, algs, num_cycles, 0, len(algs)*num_cycles)
 	} else {
-		// algs := []string{"udp-remy=bigbertha-100x.dna.5"}
-		ip_map, num_cycles := getIPS()
-		// ip_map := make(map[string][]string)
-		// ip_map["35.176.36.156"] = algs
-		// ip_map["54.179.168.237"] = algs
-		// num_cycles := 5
+		var ip_map map[string][]string
+		var num_cycles int
+		if *local_iplist != "" {
+			// TODO check if file eists, error if not
+			// TODO read file, error if bad format
+			ip_map, num_cycles = results.GetIPList(*local_iplist)
+		} else {
+			ip_map, num_cycles = getIPS()
+		}
+		if *cycles != 0 {
+			num_cycles = *cycles
+		}
+
 		sendMap := make(map[string]string) // maps IPs to times the report was sent
 		log.Info("This script will contact different servers to transfer data using different congestion control algorithms, and records data about the performance of each algorithm. It may take around 10 minutes. We're trying to guage the performance of an algorithm designed by Remy, a program that automatically generates congestion control algorithms based on input parameters.")
 		count := 1
