@@ -31,7 +31,7 @@ const DB_GRAPH_PORT = "10105"
 const CLIENT_UDP_PORT = "9876"
 
 // Ping server constants
-const PING_SIZE_BYTES = 1492
+const PING_SIZE_BYTES = 1280
 const PING_INTERSEND_MS = 500
 
 // Measure server constants
