@@ -174,7 +174,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	defer conn.Close()
 
 	// create UDP listening port
-	srcport := strconv.Itoa((9876 - cycle))
+	srcport := strconv.Itoa((9875 - cycle))
 	conn.Write([]byte(alg + "->" + srcport)) // write remy
 	//log.WithFields(log.Fields{"port": srcport}).Info("Listening on src port")
 
