@@ -77,7 +77,7 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	bytes_received := uint32(0)
 
 	// start connection
-	conn, err := net.Dial("tcp", server_ip+":"+config.MEASURE_SERVER_PORT)
+	conn, err := net.DialTimeout("tcp", server_ip+":"+config.MEASURE_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
 	if CheckErrMsg(err, "tcp connection to server") {
 		time.Sleep(2 * time.Second)
 		return flow_throughputs, flow_times, true
@@ -166,7 +166,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
 
 	// create a TCP connection to get the genericCC port
-	conn, err := net.Dial("tcp", server_ip+":"+config.OPEN_UDP_PORT)
+	conn, err := net.DialTimeout("tcp", server_ip+":"+config.OPEN_UDP_PORT, config.CONNECT_TIMEOUT*time.Second)
 	if CheckErrMsg(err, "Open TCP connection to get genericCC port number") {
 		time.Sleep(2 * time.Second)
 		return flow_throughputs, flow_times, true
@@ -350,8 +350,7 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 
 	// protocol is TCP
 
-	// TODO add a timeout for this
-	conn, err := net.Dial(protocol, server_ip+":"+port)
+	conn, err := net.DialTimeout(protocol, server_ip+":"+port, config.CONNECT_TIMEOUT*time.Second)
 	if CheckError(err) {
 		log.Warn("Error creating connection for pings", err)
 		<-end_ch
@@ -481,7 +480,7 @@ func runExperiment(f func(server_ip string, alg string, start_ch chan time.Time,
 }
 
 func sendReport(report []byte) {
-	conn, err := net.Dial("tcp", config.DB_IP+":"+config.DB_SERVER_PORT)
+	conn, err := net.DialTimeout("tcp", config.DB_IP+":"+config.DB_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
 	if CheckError(err) {
 		return
 	}
@@ -491,7 +490,7 @@ func sendReport(report []byte) {
 
 /*Contact the known DB server for a list of IPs to run the experiment at*/
 func getIPS() (results.IPList, int) {
-	conn, err := net.Dial("tcp", config.DB_IP+":"+config.IP_SERVER_PORT)
+	conn, err := net.DialTimeout("tcp", config.DB_IP+":"+config.IP_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
 	if CheckError(err) {
 		return make(results.IPList), 0
 	}
@@ -592,7 +591,7 @@ func CheckErrMsg(err error, message string) bool { // check error
 }
 
 func getURLFromServer(gg results.GraphInfo) string {
-	conn, err := net.Dial("tcp", config.DB_IP+":"+config.DB_GRAPH_PORT)
+	conn, err := net.DialTimeout("tcp", config.DB_IP+":"+config.DB_GRAPH_PORT, config.CONNECT_TIMEOUT*time.Second)
 	if CheckError(err) {
 		return "unknown"
 	}
