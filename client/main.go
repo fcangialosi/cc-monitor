@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"encoding/binary"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"os"
 	"strconv"
@@ -524,33 +526,86 @@ func GetOutboundIP() string {
 	return localAddr[0:idx]
 }
 
+func getSendTimeLocalFile(localResultsStorage string) string { // if there is a localResults file, get the sendTime
+	bytes, err := ioutil.ReadFile(localResultsStorage)
+	if err != nil {
+		log.Warn("err: ", err)
+		return "NONE"
+	}
+	// decode the bytes
+	tempReport := results.DecodeCCResults(bytes)
+	return tempReport.SendTime
+}
+
 func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int, total_experiments int) (string, int) {
-
-	// runs the experiment on the given machine, and uploads the results to the DB server
-	// addresses and algorithms to test
-	client_ip := GetOutboundIP()
-
+	localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, IP)
 	report := results.CCResults{
 		ServerIP:   IP,
-		ClientIP:   client_ip,
+		ClientIP:   "NONE", // filled in later
 		Throughput: make(map[string]([]results.BytesTimeMap)),
 		Delay:      make(map[string][]results.TimeRTTMap),
-		FlowTimes:  make(map[string][]results.OnOffMap)}
+		FlowTimes:  make(map[string][]results.OnOffMap),
+		SendTime:   "NONE"}
+	tempReport := results.CCResults{
+		ServerIP:   "NONE",
+		ClientIP:   "NONE", // filled in later
+		Throughput: make(map[string]([]results.BytesTimeMap)),
+		Delay:      make(map[string][]results.TimeRTTMap),
+		FlowTimes:  make(map[string][]results.OnOffMap),
+		SendTime:   "NONE"}
+
+	var savedBytes []byte
+	if _, err := os.Stat(localResultsStorage); err == nil {
+		bytes, err := ioutil.ReadFile(localResultsStorage)
+		if err == nil {
+			savedBytes = bytes
+			log.Info("Len of saved bytes ", len(savedBytes))
+		} else {
+			log.Warn("err: ", err)
+		}
+		// decode the bytes
+		tempReport = results.DecodeCCResults(savedBytes)
+		// delete the file
+		err = os.Remove(localResultsStorage)
+		if err != nil {
+			log.Warn("Trying to remove local results file")
+		}
+
+	}
+
+	// try to read the temporary results file - and check whether it is for this machine
+	useTemp := (tempReport.ServerIP == IP)
+
+	// open a temporary file to write the results in
+
 	for _, full_alg := range algs {
 		alg := strings.SplitN(full_alg, "-", 2)[1]
 		report.Throughput[alg] = make([]results.BytesTimeMap, num_cycles)
 		report.Delay[alg] = make([]results.TimeRTTMap, num_cycles)
 		report.FlowTimes[alg] = make([]results.OnOffMap, num_cycles)
 	}
+
+	// go through the temporary
 	// have loop for cycles here
 	cycle := 0
 	for cycle < num_cycles {
 		// loop through each algorithm
 		for _, alg := range algs {
-			alg_line_split := strings.Split(alg, "-")
-			proto := strings.ToLower(alg_line_split[0])
-			alg := strings.ToLower(strings.Join(alg_line_split[1:], "-"))
+			algLineSplit := strings.Split(alg, "-")
+			proto := strings.ToLower(algLineSplit[0])
+			alg := strings.ToLower(strings.Join(algLineSplit[1:], "-"))
 			log.WithFields(log.Fields{"alg": alg, "proto": proto, "server": IP}).Info(fmt.Sprintf("Starting Experiment %d of %d", place+1, total_experiments))
+
+			// check if the result is in the report read at beginning of the function
+			if useTemp {
+				if (len(tempReport.Throughput[alg][cycle]) > 0) && (len(tempReport.Delay[alg][cycle]) > 0) && (len(tempReport.FlowTimes[alg][cycle]) > 0) {
+					report.Throughput[alg][cycle] = tempReport.Throughput[alg][cycle]
+					report.Delay[alg][cycle] = tempReport.Delay[alg][cycle]
+					report.FlowTimes[alg][cycle] = tempReport.FlowTimes[alg][cycle]
+					log.WithFields(log.Fields{"alg": alg, "cycle": cycle}).Warn("Used results in saved file for this algorithm and cycle")
+					goto saveToFile // continue onto next algorithm and cycle
+				}
+			}
 
 			if proto == "tcp" {
 				runExperiment(measureTCP2, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, 1, cycle)
@@ -561,21 +616,27 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 				log.Error("Unknown protocol!")
 			}
 
-			place += 1
+			// write report so far into file
+		saveToFile:
+			b := results.EncodeCCResults(&report)
+			err := ioutil.WriteFile(localResultsStorage, b, 0777)
+			CheckErrMsg(err, "Writing file into bytes")
+			place++
 
 		}
 
 		cycle++
 	}
 
-	// print the reports
-
-	//log.Info("sending report")
-	// add in the current time and send in the report
 	sendTime := currentTime()
 	report.SendTime = sendTime
 	log.Info("Sending report to server")
 	sendReport(results.EncodeCCResults(&report))
+	// write the file - has a send time
+	b := results.EncodeCCResults(&report)
+	err := ioutil.WriteFile(localResultsStorage, b, 0777)
+	CheckErrMsg(err, "Writing file into bytes")
+	// TODO: write version that writes progress into "progress file" as well
 	return sendTime, place
 }
 
@@ -610,8 +671,44 @@ var manual_algs = flag.String("algs", "", "Specify a comma-separated list of alg
 var cycles = flag.Int("cycles", 0, "Specify number of trials for each algorithms")
 var local_iplist = flag.String("iplist", "", "Filename to read ips and algorithms from rather than pulling from server")
 
+func stringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if a == b {
+			return true
+		}
+	}
+	return false
+}
+
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
+	// look for a local progress file -> just lists IPs the results have been sent to
+	// on completing a full run, will delete the file
+	finishedIPs := make([]string, 0)
+	if _, err := os.Stat(config.LOCAL_PROGRESS_FILE); err == nil {
+		// read the IPs of this file into the finishedIPs - so we don't run those experiments
+		progressFile, err := os.Open(config.LOCAL_PROGRESS_FILE)
+		CheckErrMsg(err, "opening local progress file")
+		scanner := bufio.NewScanner(progressFile)
+		log.Info("local progress file exists")
+		for scanner.Scan() {
+			finishedIPs = append(finishedIPs, scanner.Text())
+		}
+		// close file
+		progressFile.Close()
+		// delete the local progress file
+		err = os.Remove(config.LOCAL_PROGRESS_FILE)
+		if err != nil {
+			log.Warn("Error removing local progress file: ", err)
+		}
+		log.Info(finishedIPs)
+	}
+
+	progressFD, err := os.Create(config.LOCAL_PROGRESS_FILE)
+	CheckErrMsg(err, "Creating File to record local progress")
+	defer progressFD.Close()
+	progressWriter := bufio.NewWriter(progressFD)
+
 	flag.Parse()
 	// Default to just Remy and TCP Cubic
 	algs := []string{"udp-remy=bigbertha-100x.dna.5", "tcp-cubic"}
@@ -626,7 +723,7 @@ func main() {
 			num_cycles = *cycles
 		}
 		runExperimentOnMachine(mahimahi, algs, num_cycles, 0, len(algs)*num_cycles)
-	} else {
+	} else { // contact DB for files
 		var ip_map map[string][]string
 		var num_cycles int
 		if *local_iplist != "" {
@@ -642,6 +739,8 @@ func main() {
 
 		sendMap := make(map[string]string) // maps IPs to times the report was sent
 		log.Info("This script will contact different servers to transfer data using different congestion control algorithms, and records data about the performance of each algorithm. It may take around 10 minutes. We're trying to guage the performance of an algorithm designed by Remy, a program that automatically generates congestion control algorithms based on input parameters.")
+		log.Warn("In case the script doesn't run fully, it will write partial results to /tmp/cc-client_results-IP.log and /tmp/cc-client_progress.log in order to checkpoint progress. Next time the script runs, it will pick up from this progress")
+
 		count := 1
 		total_experiments := 0
 		place := 0
@@ -649,23 +748,54 @@ func main() {
 			total_experiments += len(val) * num_cycles
 		}
 		for IP, val := range ip_map {
+			sendTime := "NONE"
+			new_place := 0
+			if stringInSlice(IP, finishedIPs) {
+				log.Warn("Already finished experiment from previous IP for machine ", IP)
+				goto recordProgress
+			}
 			log.WithFields(log.Fields{"ip": IP}).Info(fmt.Sprintf("Contacting Server %d/%d ", count, len(ip_map)))
-			sendTime, new_place := runExperimentOnMachine(IP, val, num_cycles, place, total_experiments)
+			sendTime, new_place = runExperimentOnMachine(IP, val, num_cycles, place, total_experiments)
 			place = new_place
 			sendMap[IP] = sendTime
 			count++
+
+		recordProgress:
+			// the file should also be available, look for sendTime there
+			localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, IP)
+			sendTime = getSendTimeLocalFile(localResultsStorage)
+			sendMap[IP] = sendTime
+			fmt.Fprintf(progressWriter, "%s\n", IP)
+			progressWriter.Flush()
 		}
 
 		// now ask the server for the link to the graph
 		log.Info("We will now give links to the graphs summarizing the experiment. They might not load immediately.")
 		count = 1
 		for IP, time := range sendMap {
+			if time == "NONE" {
+				continue
+			}
 			info := results.GraphInfo{ServerIP: IP, SendTime: time}
 			url := getURLFromServer(info)
 			result := fmt.Sprintf("View result # %d at %s\n", count, url)
 			log.Info(result)
 			count++
 		}
+		// delete all the files
+		for IP := range ip_map {
+			localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, IP)
+			err = os.Remove(localResultsStorage)
+			if err != nil {
+				log.Info("Error removing local results storage: ", localResultsStorage)
+			}
+		}
+		// delete progress files
+		err = os.Remove(config.LOCAL_PROGRESS_FILE)
+		if err != nil {
+			log.Info("Error removing local progress file: ", config.LOCAL_PROGRESS_FILE)
+		}
+
 	}
 
 	log.Info("All experiments finished! Thanks for helping us with our congestion control research.")

@@ -82,3 +82,7 @@ const MINUTE_TIMEOUT = 60
 const HALF_MINUTE_TIMEOUT = 30
 const CONNECT_TIMEOUT = 30
 const MAX_CONNECT_ATTEMPTS = 6
+
+// files
+const LOCAL_PROGRESS_FILE = "/tmp/cc-client_progress.log"
+const LOCAL_RESULTS_FILE = "/tmp/cc-client_results.log"
