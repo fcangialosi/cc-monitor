@@ -341,12 +341,13 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 			time.Sleep(time.Millisecond * 500)
 		}
 
-		// broken -> return
+		mutex.Lock()
 		avg_delay := float32(0)
 		for _, rtt := range rtt_dict {
 			avg_delay += rtt
 		}
 		avg_delay /= float32(len(rtt_dict))
+		mutex.Unlock()
 		log.WithFields(log.Fields{"avg_delay_ms": avg_delay}).Info()
 		return rtt_dict
 	}
