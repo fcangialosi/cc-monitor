@@ -1,0 +1,15 @@
+#!/bin/sh
+
+last_version=$(git log --oneline -1 | cut -d "[" -f2 | cut -d "]" -f1)
+last_version_tag=$(echo $last_version | cut -d "-" -f1)
+last_manual_tag=$(git describe --abbrev=0)
+new_version=$last_manual_tag
+if [ "$last_manual_tag" == "$last_version_tag" ]
+then
+	last_commit=$(echo $last_version | cut -d "c" -f2)
+	new_version="$new_version-c$((last_commit + 1))"
+else
+	new_version="$new_version-c1"
+fi
+
+echo $new_version
