@@ -186,6 +186,9 @@ func GetIPList(ip_file string) (IPList, int) {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		ip_line := scanner.Text() // line: IP UDP alg1 alg2 TCP alg1 alg2 ....
+		if ip_line[:1] == "#" {
+			continue
+		}
 		ip_line_split := strings.Split(ip_line, " ")
 		log.Info(ip_line_split)
 		if len(ip_line_split) == 1 {

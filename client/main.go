@@ -683,7 +683,7 @@ func stringInSlice(a string, list []string) bool {
 
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
-	version := "v1.0-c2"
+	version := "v1.0-c3"
 	fmt.Printf("cctest %s\n\n", version)
 	log.Info("This script will contact different servers to transfer data using different congestion control algorithms, and records data about the performance of each algorithm. It may take around 10 minutes. We're trying to guage the performance of an algorithm designed by Remy, a program that automatically generates congestion control algorithms based on input parameters.")
 	log.Warn("In case the script doesn't run fully, it will write partial results to /tmp/cc-client_results-IP.log and /tmp/cc-client_progress.log in order to checkpoint progress. Next time the script runs, it will pick up from this progress")
