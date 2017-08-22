@@ -104,7 +104,7 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	started_flow := false
 	dline := time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second)
 	conn.SetReadDeadline(dline)
-	log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
+	// log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
 	//conn.SetReadDeadline(time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second))
 
 	for {
@@ -127,7 +127,7 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 			started_flow = true
 			dline := time.Now().Add(30 * time.Second)
 			conn.SetReadDeadline(dline)
-			log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
+			// log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
 			//conn.SetReadDeadline(time.Now().Add(30 * time.Second)) // connection should end 30 seconds from now
 		}
 
@@ -211,14 +211,14 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	flow_times[config.START] = flow_start
 
 	// loop of punching NAT and waiting for a response
-	log.Info("trying to punch NAT and establish connection")
+	// log.Info("trying to punch NAT and establish connection")
 
 	attempts := 1
 	for {
 		receiver.WriteToUDP([]byte("open seasame"), gccAddr) // just send, ifnore any errors
 		dline := time.Now().Add(config.HALF_MINUTE_TIMEOUT / 6 * time.Second)
 		receiver.SetReadDeadline(dline)
-		log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
+		// log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
 		attempts++
 		//receiver.SetReadDeadline(time.Now().Add(config.MINUTE_TIMEOUT / 6 * time.Second))
 		n, raddr, err := receiver.ReadFromUDP(recvBuf)
@@ -237,7 +237,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 		}
 		// reset start time
-		log.Info("Received first data from UDP program")
+		// log.Info("Received first data from UDP program")
 		start = time.Now()
 		flow_start = float32(start.Sub(original_start).Seconds() * 1000)
 		last_received_time = flow_start
@@ -257,14 +257,14 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	// initial timeout -> 30 Seconds
 	dline := time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second)
 	receiver.SetReadDeadline(dline)
-	log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
+	// log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
 	//receiver.SetReadDeadline(time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second))
 
 	for {
 		n, raddr, err := receiver.ReadFromUDP(recvBuf)
 
 		if err, ok := err.(net.Error); ok && err.Timeout() {
-			log.Warn("timeout")
+			// log.Warn("timeout")
 			break
 		} else if err == io.EOF {
 			break
@@ -560,7 +560,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 		bytes, err := ioutil.ReadFile(localResultsStorage)
 		if err == nil {
 			savedBytes = bytes
-			log.Info("Len of saved bytes ", len(savedBytes))
+			// log.Info("Len of saved bytes ", len(savedBytes))
 		} else {
 			log.Warn("err: ", err)
 		}
@@ -595,17 +595,16 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 			algLineSplit := strings.Split(alg, "-")
 			proto := strings.ToLower(algLineSplit[0])
 			alg := strings.ToLower(strings.Join(algLineSplit[1:], "-"))
-			log.WithFields(log.Fields{"alg": alg, "proto": proto, "server": IP}).Info(fmt.Sprintf("Starting Experiment %d of %d", place+1, total_experiments))
 
 			// check if the result is in the report read at beginning of the function
-			if useTemp {
-				if (len(tempReport.Throughput[alg][cycle]) > 0) && (len(tempReport.Delay[alg][cycle]) > 0) && (len(tempReport.FlowTimes[alg][cycle]) > 0) {
-					report.Throughput[alg][cycle] = tempReport.Throughput[alg][cycle]
-					report.Delay[alg][cycle] = tempReport.Delay[alg][cycle]
-					report.FlowTimes[alg][cycle] = tempReport.FlowTimes[alg][cycle]
-					log.WithFields(log.Fields{"alg": alg, "cycle": cycle}).Warn("Used results in saved file for this algorithm and cycle")
-					goto saveToFile // continue onto next algorithm and cycle
-				}
+			if useTemp && (len(tempReport.Throughput[alg][cycle]) > 0) && (len(tempReport.Delay[alg][cycle]) > 0) && (len(tempReport.FlowTimes[alg][cycle]) > 0) {
+				report.Throughput[alg][cycle] = tempReport.Throughput[alg][cycle]
+				report.Delay[alg][cycle] = tempReport.Delay[alg][cycle]
+				report.FlowTimes[alg][cycle] = tempReport.FlowTimes[alg][cycle]
+				// log.WithFields(log.Fields{"alg": alg, "cycle": cycle}).Warn("Used results in saved file for this algorithm and cycle")
+				goto saveToFile // continue onto next algorithm and cycle
+			} else {
+				log.WithFields(log.Fields{"alg": alg, "proto": proto, "server": IP}).Info(fmt.Sprintf("Starting Experiment %d of %d", place+1, total_experiments))
 			}
 
 			if proto == "tcp" {
@@ -683,8 +682,12 @@ func stringInSlice(a string, list []string) bool {
 
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
-	version := "v1.0-c3"
+
+	version := "v1.0-c4"
 	fmt.Printf("cctest %s\n\n", version)
+
+	flag.Parse()
+
 	log.Info("This script will contact different servers to transfer data using different congestion control algorithms, and records data about the performance of each algorithm. It may take around 10 minutes. We're trying to guage the performance of an algorithm designed by Remy, a program that automatically generates congestion control algorithms based on input parameters.")
 	log.Warn("In case the script doesn't run fully, it will write partial results to /tmp/cc-client_results-IP.log and /tmp/cc-client_progress.log in order to checkpoint progress. Next time the script runs, it will pick up from this progress")
 	// look for a local progress file -> just lists IPs the results have been sent to
@@ -695,7 +698,7 @@ func main() {
 		progressFile, err := os.Open(config.LOCAL_PROGRESS_FILE)
 		CheckErrMsg(err, "opening local progress file")
 		scanner := bufio.NewScanner(progressFile)
-		log.Info("local progress file exists")
+		// log.Info("local progress file exists")
 		for scanner.Scan() {
 			finishedIPs = append(finishedIPs, scanner.Text())
 		}
@@ -706,7 +709,7 @@ func main() {
 		if err != nil {
 			log.Warn("Error removing local progress file: ", err)
 		}
-		log.Info(finishedIPs)
+		// log.Info(finishedIPs)
 	}
 
 	progressFD, err := os.Create(config.LOCAL_PROGRESS_FILE)
@@ -714,7 +717,6 @@ func main() {
 	defer progressFD.Close()
 	progressWriter := bufio.NewWriter(progressFD)
 
-	flag.Parse()
 	// Default to just Remy and TCP Cubic
 	algs := []string{"udp-remy=bigbertha-100x.dna.5", "tcp-cubic"}
 
