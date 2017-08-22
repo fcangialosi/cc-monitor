@@ -602,6 +602,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 				report.Delay[alg][cycle] = tempReport.Delay[alg][cycle]
 				report.FlowTimes[alg][cycle] = tempReport.FlowTimes[alg][cycle]
 				// log.WithFields(log.Fields{"alg": alg, "cycle": cycle}).Warn("Used results in saved file for this algorithm and cycle")
+				log.Info("skipping")
 				goto saveToFile // continue onto next algorithm and cycle
 			} else {
 				log.WithFields(log.Fields{"alg": alg, "proto": proto, "server": IP}).Info(fmt.Sprintf("Starting Experiment %d of %d", place+1, total_experiments))
@@ -670,6 +671,7 @@ var use_mm = flag.Bool("mm", false, "If true, connect to a local server from ins
 var manual_algs = flag.String("algs", "", "Specify a comma-separated list of algorithms to test, e.g. \"tcp-cubic,tcp-reno\"")
 var cycles = flag.Int("cycles", 0, "Specify number of trials for each algorithms")
 var local_iplist = flag.String("iplist", "", "Filename to read ips and algorithms from rather than pulling from server")
+var should_resume = flag.Bool("resume", false, "Resume from most recent unfinished run")
 
 func stringInSlice(a string, list []string) bool {
 	for _, b := range list {
@@ -683,7 +685,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c4"
+	version := "v1.0-c5"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
@@ -693,29 +695,23 @@ func main() {
 	// look for a local progress file -> just lists IPs the results have been sent to
 	// on completing a full run, will delete the file
 	finishedIPs := make([]string, 0)
-	if _, err := os.Stat(config.LOCAL_PROGRESS_FILE); err == nil {
+	var progressFile *os.File
+	if _, err := os.Stat(config.LOCAL_PROGRESS_FILE); *should_resume && err == nil {
 		// read the IPs of this file into the finishedIPs - so we don't run those experiments
-		progressFile, err := os.Open(config.LOCAL_PROGRESS_FILE)
+		progressFile, err = os.OpenFile(config.LOCAL_PROGRESS_FILE, os.O_RDWR, 0644)
 		CheckErrMsg(err, "opening local progress file")
 		scanner := bufio.NewScanner(progressFile)
 		// log.Info("local progress file exists")
 		for scanner.Scan() {
 			finishedIPs = append(finishedIPs, scanner.Text())
 		}
-		// close file
-		progressFile.Close()
-		// delete the local progress file
-		err = os.Remove(config.LOCAL_PROGRESS_FILE)
-		if err != nil {
-			log.Warn("Error removing local progress file: ", err)
-		}
-		// log.Info(finishedIPs)
+	} else {
+		progressFile, err = os.OpenFile(config.LOCAL_PROGRESS_FILE, os.O_RDWR|os.O_APPEND, 0644)
+		CheckErrMsg(err, "Creating file to record local progress")
 	}
 
-	progressFD, err := os.Create(config.LOCAL_PROGRESS_FILE)
-	CheckErrMsg(err, "Creating File to record local progress")
-	defer progressFD.Close()
-	progressWriter := bufio.NewWriter(progressFD)
+	defer progressFile.Close()
+	progressWriter := bufio.NewWriter(progressFile)
 
 	// Default to just Remy and TCP Cubic
 	algs := []string{"udp-remy=bigbertha-100x.dna.5", "tcp-cubic"}
@@ -749,28 +745,30 @@ func main() {
 		count := 1
 		total_experiments := 0
 		place := 0
-		for _, val := range ip_map {
+		for ip, val := range ip_map {
 			total_experiments += len(val) * num_cycles
+			if stringInSlice(ip, finishedIPs) {
+				place += len(val) * num_cycles
+				count++
+			}
 		}
-		for IP, val := range ip_map {
+		for ip, val := range ip_map {
 			sendTime := "NONE"
 			new_place := 0
-			if stringInSlice(IP, finishedIPs) {
-				log.Warn("Already finished experiment from previous IP for machine ", IP)
-				goto recordProgress
+			if stringInSlice(ip, finishedIPs) {
+				continue
 			}
-			log.WithFields(log.Fields{"ip": IP}).Info(fmt.Sprintf("Contacting Server %d/%d ", count, len(ip_map)))
-			sendTime, new_place = runExperimentOnMachine(IP, val, num_cycles, place, total_experiments)
+			log.WithFields(log.Fields{"ip": ip}).Info(fmt.Sprintf("Contacting Server %d/%d ", count, len(ip_map)))
+			sendTime, new_place = runExperimentOnMachine(ip, val, num_cycles, place, total_experiments)
 			place = new_place
-			sendMap[IP] = sendTime
+			sendMap[ip] = sendTime
 			count++
 
-		recordProgress:
 			// the file should also be available, look for sendTime there
-			localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, IP)
+			localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, ip)
 			sendTime = getSendTimeLocalFile(localResultsStorage)
-			sendMap[IP] = sendTime
-			fmt.Fprintf(progressWriter, "%s\n", IP)
+			sendMap[ip] = sendTime
+			fmt.Fprintf(progressWriter, "%s\n", ip)
 			progressWriter.Flush()
 		}
 
@@ -790,13 +788,13 @@ func main() {
 		// delete all the files
 		for IP := range ip_map {
 			localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, IP)
-			err = os.Remove(localResultsStorage)
+			err := os.Remove(localResultsStorage)
 			if err != nil {
 				log.Info("Error removing local results storage: ", localResultsStorage)
 			}
 		}
 		// delete progress files
-		err = os.Remove(config.LOCAL_PROGRESS_FILE)
+		err := os.Remove(config.LOCAL_PROGRESS_FILE)
 		if err != nil {
 			log.Info("Error removing local progress file: ", config.LOCAL_PROGRESS_FILE)
 		}
