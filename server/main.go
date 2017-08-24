@@ -220,14 +220,25 @@ func runGCC(srcport string, ip string, alg string) {
 	alg_path := strings.Split(alg, "->")[0]
 	port := strings.Split(alg, "->")[1]                           // assume "remy=pathname=TRAIN_LENGTH=LINKRATE->clientport"
 	path := config.PATH_TO_RATS + strings.Split(alg_path, "=")[1] // assume alg is remy-ratname at hardcoded path
-	trainLength := strings.Split(alg_path, "=")[2]
-	linkRate := strings.Split(alg_path, "=")[3]
+	trainLength := strconv.Itoa(1)
+	linkRate := strconv.Itoa(1)
 	log.Info(port)
 	on_time := strconv.Itoa(config.MEAN_ON_TIME_MS)
 	off_time := strconv.Itoa(0)   // have a 0 off time
 	num_cycles := strconv.Itoa(1) // send for 1 on and off period
 	log.WithFields(log.Fields{"num cycles": num_cycles}).Info("num cycles")
 
+	if len(strings.Split(alg_path, "=")) == 4 {
+		// train length and linkspeed provided
+		trainLength = strings.Split(alg_path, "=")[2]
+		linkRate = strings.Split(alg_path, "=")[3]
+		linkRateMbps, err := strconv.Atoi(linkRate)
+		if err != nil {
+			log.WithFields(log.Fields{"link rate": linkRate}).Warn("Error when converting linkRate to right units: ", err)
+		}
+		linkRatePPS := linkRateMbps * 125000 / config.PING_SIZE_BYTES
+		linkRate = strconv.Itoa(linkRatePPS)
+	}
 	// Now we can start genericCC
 	// set MIN_RTT env variable
 	os.Setenv("MIN_RTT", "150")
