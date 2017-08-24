@@ -218,9 +218,10 @@ func runGCC(srcport string, ip string, alg string) {
 	log.Info(alg)
 	udp_alg := "remy"
 	alg_path := strings.Split(alg, "->")[0]
-	port := strings.Split(alg, "->")[1]                           // assume "remy=pathname=TRAIN_LENGTH->clientport"
+	port := strings.Split(alg, "->")[1]                           // assume "remy=pathname=TRAIN_LENGTH=LINKRATE->clientport"
 	path := config.PATH_TO_RATS + strings.Split(alg_path, "=")[1] // assume alg is remy-ratname at hardcoded path
 	trainLength := strings.Split(alg_path, "=")[2]
+	linkRate := strings.Split(alg_path, "=")[3]
 	log.Info(port)
 	on_time := strconv.Itoa(config.MEAN_ON_TIME_MS)
 	off_time := strconv.Itoa(0)   // have a 0 off time
@@ -240,6 +241,7 @@ func runGCC(srcport string, ip string, alg string) {
 			"offduration=" + off_time,
 			"cctype=remy",
 			"train_length=" + trainLength,
+			"linkrate=" + linkRate,
 			"traffic_params=deterministic,num_cycles=" + num_cycles,
 			"if=" + path,
 		}
