@@ -174,42 +174,43 @@ func handleRequestTCP(conn *net.TCPConn) {
 
 	req := string(reqBuf[:n])
 
-	switch req {
-	case "remy": // handle remy
-		// TODO launch genericc
-	default: // must be one of the tcps
-		file, err := conn.File()
-		if err != nil {
-			log.Error(err)
-		}
-		syscall.SetsockoptString(int(file.Fd()), syscall.IPPROTO_TCP, config.TCP_CONGESTION, req)
-
-		// generate on/off distributions
-		//prng := getNewPRNG()
-		//on_dist := createExpDist(config.MEAN_ON_TIME_MS, prng)
-		//on_time := time.Millisecond * time.Duration(on_dist.Sample()+config.MEAN_ON_TIME_MS)
-		on_time := time.Millisecond * config.MEAN_ON_TIME_MS
-		// on - send start flow message
-		log.WithFields(log.Fields{"on": on_time}).Info("new on for tcp")
-		conn.Write(startBuf)
-		log.Info("Wrote to start buf")
-		buf := make([]byte, config.ACK_LEN)
-		conn.Read(buf) // wait for ack back
-		log.Info("Got ack")
-		on_timer := time.After(on_time)
-	sendloop:
-		for {
-			select {
-			case <-on_timer:
-				break sendloop
-			default:
-				//log.Warn("Waiting to write to TCP connection")
-				conn.Write(sendBuf)
-			}
-		}
-		log.Info("Done with on - about to close connection")
-		err = conn.Close()
+	file, err := conn.File()
+	if err != nil {
+		log.Error(err)
 	}
+
+	var ccname string
+	if req[:3] == "ccp" {
+		ccname = "ccp"
+		// sp := strings.Split(req, "-")
+		// ccp_alg := sp[1]
+		// TODO assuming nimbus for now
+		// ccp_params := strings.Split(sp[2], ",")
+		// TODO need to pass these params to ccp
+	} else {
+		ccname = req
+	}
+	syscall.SetsockoptString(int(file.Fd()), syscall.IPPROTO_TCP, config.TCP_CONGESTION, ccname)
+
+	on_time := time.Millisecond * config.MEAN_ON_TIME_MS
+	conn.Write(startBuf)
+	buf := make([]byte, config.ACK_LEN)
+	conn.Read(buf) // wait for ack back
+	log.Info("Connection established, starting sendloop")
+	on_timer := time.After(on_time)
+sendloop:
+	for {
+		select {
+		case <-on_timer:
+			break sendloop
+		default:
+			//log.Warn("Waiting to write to TCP connection")
+			conn.Write(sendBuf)
+		}
+	}
+	log.Info("Done. Closing connection...")
+	err = conn.Close()
+
 	return
 }
 

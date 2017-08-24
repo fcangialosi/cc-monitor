@@ -671,7 +671,7 @@ func getURLFromServer(gg results.GraphInfo) string {
 var use_mm = flag.Bool("mm", false, "If true, connect to a local server from inside a mahimahi shell")
 var manual_algs = flag.String("algs", "", "Specify a comma-separated list of algorithms to test, e.g. \"tcp-cubic,tcp-reno\"")
 var cycles = flag.Int("cycles", 0, "Specify number of trials for each algorithms")
-var local_iplist = flag.String("iplist", "", "Filename to read ips and algorithms from rather than pulling from server")
+var local_iplist = flag.String("config", "", "Filename to read ips and algorithms from rather than pulling from server")
 var should_resume = flag.Bool("resume", false, "Resume from most recent unfinished run")
 
 func stringInSlice(a string, list []string) bool {
@@ -686,7 +686,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c6"
+	version := "v1.0-c7"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
