@@ -707,7 +707,8 @@ func main() {
 			finishedIPs = append(finishedIPs, scanner.Text())
 		}
 	} else {
-		progressFile, err = os.OpenFile(config.LOCAL_PROGRESS_FILE, os.O_RDWR|os.O_APPEND, 0644)
+		log.Info("Opening file to record local progress: ", config.LOCAL_PROGRESS_FILE)
+		progressFile, err = os.OpenFile(config.LOCAL_PROGRESS_FILE, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644) // also creates file
 		CheckErrMsg(err, "Creating file to record local progress")
 	}
 
