@@ -686,7 +686,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c15"
+	version := "v1.1-c1"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
@@ -750,7 +750,6 @@ func main() {
 		count := 1
 		total_experiments := 0
 		place := 0
-		log.Info(ip_order)
 		for _, ip := range ip_order {
 			val := ip_map[ip]
 			total_experiments += len(val) * num_cycles
@@ -761,8 +760,6 @@ func main() {
 		}
 		for _, ip := range ip_order {
 			val := ip_map[ip]
-			log.Info(ip)
-			log.Info(val)
 			sendTime := "NONE"
 			new_place := 0
 			if stringInSlice(ip, finishedIPs) {
