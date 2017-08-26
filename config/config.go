@@ -10,7 +10,9 @@ const DB_NAME = "cc_test_data"
 const DB_TABLE_NAME = "cc_results"
 const DB_USERNAME = "user"
 const DB_PASSWORD = "password"
-const IP_LIST_LOCATION = "/home/ubuntu/ip.txt"
+
+// const IP_LIST_LOCATION = "/home/ubuntu/ip.txt"
+const IP_LIST_LOCATION = "./default.config"
 
 // HEADER
 const HEADER_SIZE = 32
@@ -80,7 +82,7 @@ const CLIENT_TIMEOUT = 10 // 10 seconds before the client times out
 const TCP_TIMEOUT = 2     // 1 second to try to get data
 const MINUTE_TIMEOUT = 60
 const HALF_MINUTE_TIMEOUT = 30
-const CONNECT_TIMEOUT = 30
+const CONNECT_TIMEOUT = 10
 const MAX_CONNECT_ATTEMPTS = 6
 
 // files

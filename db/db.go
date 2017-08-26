@@ -54,10 +54,10 @@ func introServer(ip_file string) {
 		go func(c *net.TCPConn) {
 			p := make([]byte, config.LARGE_BUF_SIZE)
 			defer conn.Close()
-			ip_list, num_cycles := results.GetIPList(ip_file)
+			ip_list, ip_order, num_cycles := results.GetIPList(ip_file)
 			// send it back to the server
 			conn.Read(p)
-			conn.Write(results.EncodeIPList(ip_list, num_cycles))
+			conn.Write(results.EncodeIPList(ip_list, ip_order, num_cycles))
 		}(conn)
 	}
 
@@ -256,8 +256,8 @@ func main() {
 	elapsed_ms := elapsed.Seconds() * float64(time.Second/time.Millisecond)
 	log.WithFields(log.Fields{"elapsed": elapsed_ms}).Info("elapsed time")
 	// get the ip list for tests
-	ip_list, num_cycles := results.GetIPList(config.IP_LIST_LOCATION)
-	log.WithFields(log.Fields{"num_cycles": num_cycles}).Info(ip_list)
+	ip_list, ip_order, num_cycles := results.GetIPList(config.IP_LIST_LOCATION)
+	log.WithFields(log.Fields{"num_cycles": num_cycles, "order": ip_order}).Info(ip_list)
 
 	quit := make(chan struct{})
 	go introServer(config.IP_LIST_LOCATION)

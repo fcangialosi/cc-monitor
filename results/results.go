@@ -61,16 +61,18 @@ func DecodeGraphInfo(data []byte) GraphInfo {
 	return results
 }
 
-func EncodeIPList(list IPList, num_cycles int) []byte {
+func EncodeIPList(list IPList, order []string, num_cycles int) []byte {
 	w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
 	e.Encode(list)
+	e.Encode(order)
 	e.Encode(num_cycles)
 	return w.Bytes()
 }
 
-func DecodeIPList(data []byte) (IPList, int) {
+func DecodeIPList(data []byte) (IPList, []string, int) {
 	var res IPList
+	var order []string
 	var num_cycles int
 	r := bytes.NewBuffer(data)
 	if data == nil || len(data) < 1 {
@@ -78,8 +80,9 @@ func DecodeIPList(data []byte) (IPList, int) {
 	}
 	d := gob.NewDecoder(r)
 	d.Decode(&res)
+	d.Decode(&order)
 	d.Decode(&num_cycles)
-	return res, num_cycles
+	return res, order, num_cycles
 }
 
 /*Encodes cc result struct*/
@@ -177,8 +180,9 @@ func checkError(err error) {
 }
 
 // TODO move this to a separate package
-func GetIPList(ip_file string) (IPList, int) {
+func GetIPList(ip_file string) (IPList, []string, int) {
 	ip_list := make(IPList)
+	var ip_order []string
 	var num_cycles int
 	file, err := os.Open(ip_file)
 	defer file.Close()
@@ -205,8 +209,9 @@ func GetIPList(ip_file string) (IPList, int) {
 		}
 
 		ip_list[ip] = algs
-		log.WithFields(log.Fields{"IP": ip, "algs": algs}).Info("Read from IP list")
+		ip_order = append(ip_order, ip)
+		log.WithFields(log.Fields{"IP": ip, "algs": algs, "order": ip_order}).Info("Read from IP list")
 	}
 	checkError(scanner.Err())
-	return ip_list, num_cycles
+	return ip_list, ip_order, num_cycles
 }

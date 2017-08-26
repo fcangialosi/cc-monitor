@@ -493,10 +493,10 @@ func sendReport(report []byte) {
 }
 
 /*Contact the known DB server for a list of IPs to run the experiment at*/
-func getIPS() (results.IPList, int) {
+func getIPS() (results.IPList, []string, int) {
 	conn, err := net.DialTimeout("tcp", config.DB_IP+":"+config.IP_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
 	if CheckError(err) {
-		return make(results.IPList), 0
+		return make(results.IPList), make([]string, 0), 0
 	}
 	defer conn.Close()
 	ack_buf := []byte("ack")
@@ -507,11 +507,11 @@ func getIPS() (results.IPList, int) {
 	// write ack, get back list of IPs
 	n, err := conn.Read(recv_buf)
 	if CheckError(err) {
-		return make(results.IPList), 0
+		return make(results.IPList), make([]string, 0), 0
 	}
-	ip_list, num_cycles := results.DecodeIPList(recv_buf[:n])
+	ip_list, ip_order, num_cycles := results.DecodeIPList(recv_buf[:n])
 
-	return ip_list, num_cycles
+	return ip_list, ip_order, num_cycles
 
 }
 
@@ -686,7 +686,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c14"
+	version := "v1.0-c15"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
@@ -732,13 +732,14 @@ func main() {
 		runExperimentOnMachine(mahimahi, algs, num_cycles, 0, len(algs)*num_cycles, false)
 	} else { // contact DB for files
 		var ip_map map[string][]string
+		var ip_order []string
 		var num_cycles int
 		if *local_iplist != "" {
 			// TODO check if file eists, error if not
 			// TODO read file, error if bad format
-			ip_map, num_cycles = results.GetIPList(*local_iplist)
+			ip_map, ip_order, num_cycles = results.GetIPList(*local_iplist)
 		} else {
-			ip_map, num_cycles = getIPS()
+			ip_map, ip_order, num_cycles = getIPS()
 		}
 		if *cycles != 0 {
 			num_cycles = *cycles
@@ -749,14 +750,19 @@ func main() {
 		count := 1
 		total_experiments := 0
 		place := 0
-		for ip, val := range ip_map {
+		log.Info(ip_order)
+		for _, ip := range ip_order {
+			val := ip_map[ip]
 			total_experiments += len(val) * num_cycles
 			if stringInSlice(ip, finishedIPs) {
 				place += len(val) * num_cycles
 				count++
 			}
 		}
-		for ip, val := range ip_map {
+		for _, ip := range ip_order {
+			val := ip_map[ip]
+			log.Info(ip)
+			log.Info(val)
 			sendTime := "NONE"
 			new_place := 0
 			if stringInSlice(ip, finishedIPs) {
