@@ -313,7 +313,7 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 				break udpSendloop
 			default:
 				go func(m results.TimeRTTMap) {
-					conn, err := net.Dial(protocol, server_ip+":"+port)
+					conn, err := net.DialTimeout(protocol, server_ip+":"+port, config.CONNECT_TIMEOUT*time.Second)
 					if err != nil {
 						log.Warn("Non nill error on writing udp pings: ", err)
 						return
@@ -517,7 +517,7 @@ func getIPS() (results.IPList, int) {
 
 //function to get the public ip address - found online
 func GetOutboundIP() string {
-	conn, err := net.Dial("udp", "8.8.8.8:80")
+	conn, err := net.DialTimeout("udp", "8.8.8.8:80", config.CONNECT_TIMEOUT*time.Second)
 	if CheckError(err) {
 		return ""
 	}
@@ -686,7 +686,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c12"
+	version := "v1.0-c13"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
