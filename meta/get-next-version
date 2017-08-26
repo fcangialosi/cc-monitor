@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 last_version=$(git log --oneline -1 | cut -d "[" -f2 | cut -d "]" -f1)
 last_version_tag=$(echo $last_version | cut -d "-" -f1)
