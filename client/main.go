@@ -686,7 +686,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c13"
+	version := "v1.0-c14"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
@@ -706,6 +706,8 @@ func main() {
 		for scanner.Scan() {
 			finishedIPs = append(finishedIPs, scanner.Text())
 		}
+		log.Info("Waiting 30 seconds before resuming to prevent conflicting with previous experiment (the server may still be sending")
+		time.Sleep(30 * time.Second)
 	} else {
 		log.Info("Opening file to record local progress: ", config.LOCAL_PROGRESS_FILE)
 		progressFile, err = os.OpenFile(config.LOCAL_PROGRESS_FILE, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644) // also creates file
