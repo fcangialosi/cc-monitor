@@ -635,7 +635,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 
 	sendTime := currentTime()
 	report.SendTime = sendTime
-	log.Info("Sending report to server")
+	log.WithFields(log.Fields{"time": sendTime}).Info("Sending report to server")
 	sendReport(results.EncodeCCResults(&report))
 	// write the file - has a send time
 	b := results.EncodeCCResults(&report)
@@ -689,7 +689,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c2"
+	version := "v1.0-c3"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
