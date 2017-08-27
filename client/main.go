@@ -268,6 +268,9 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 			break
 		} else if err == io.EOF {
 			break
+		} else if err != nil {
+			log.Info("Non-nil err on sending UDP message: ", err)
+			break
 		}
 
 		bytes_received += uint32(n)
@@ -686,7 +689,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c1"
+	version := "v1.0-c2"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
