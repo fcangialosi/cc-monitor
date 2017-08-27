@@ -28,7 +28,7 @@ func readfile(filepath string, outfile string) {
 	defer f.Close()
 	checkErrMsg(err, "opening file")
 
-	b := make([]byte, 50000000)
+	b := make([]byte, 2000000000)
 	// it is an encoded CCResults -> must decode it
 	n, err := f.Read(b)
 	checkErrMsg(err, "reading bytes into buf")
