@@ -689,7 +689,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c3"
+	version := "v1.0-c4"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
@@ -766,6 +766,10 @@ func main() {
 			sendTime := "NONE"
 			new_place := 0
 			if stringInSlice(ip, finishedIPs) {
+				// file should be available to look for send time
+				localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, ip)
+				sendTime = getSendTimeLocalFile(localResultsStorage)
+				sendMap[ip] = sendTime
 				continue
 			}
 			log.WithFields(log.Fields{"ip": ip}).Info(fmt.Sprintf("Contacting Server %d/%d ", count, len(ip_map)))
