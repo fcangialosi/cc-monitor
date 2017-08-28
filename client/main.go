@@ -340,7 +340,9 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 					}
 
 					rtt := recvTimestamp - sendTimestamp
+					log.WithFields(log.Fields{"rtt": rtt, "sent at": sendTimestamp}).Info("UDP ping")
 					mutex.Lock()
+					log.WithFields(log.Fields{"rtt": rtt, "sent at": sendTimestamp}).Info("Recording ping in map")
 					m[sendTimestamp] = rtt
 					mutex.Unlock()
 
@@ -695,7 +697,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c7"
+	version := "v1.0-c8"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
