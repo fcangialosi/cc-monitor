@@ -161,6 +161,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	// send start to ping channel
 	original_start := time.Now()
 	start_ch <- original_start
+	log.Info("Sent start to the ping channel")
 	defer func() { end_ch <- time.Time{} }()
 
 	// for each flow, start a separate connection to the server to spawn genericCC
@@ -689,7 +690,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c4"
+	version := "v1.0-c5"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
