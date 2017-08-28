@@ -340,9 +340,7 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 					}
 
 					rtt := recvTimestamp - sendTimestamp
-					log.WithFields(log.Fields{"rtt": rtt, "sent at": sendTimestamp}).Info("UDP ping")
 					mutex.Lock()
-					log.WithFields(log.Fields{"rtt": rtt, "sent at": sendTimestamp}).Info("Recording ping in map")
 					m[sendTimestamp] = rtt
 					mutex.Unlock()
 
@@ -495,12 +493,25 @@ func runExperiment(f func(server_ip string, alg string, start_ch chan time.Time,
 }
 
 func sendReport(report []byte) {
+	log.Info("Sending report to server: size ", len(report))
 	conn, err := net.DialTimeout("tcp", config.DB_IP+":"+config.DB_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
 	if CheckError(err) {
 		return
 	}
 	defer conn.Close()
-	conn.Write(report)
+	// write report in chunks
+	chunkSize := 4000
+	size := len(report)
+	sent := 0
+	for sent < size {
+		if chunkSize >= (size - sent) {
+			conn.Write(report[sent : sent+chunkSize])
+			sent += chunkSize
+		} else {
+			conn.Write(report[sent:])
+			sent = size
+		}
+	}
 }
 
 /*Contact the known DB server for a list of IPs to run the experiment at*/
@@ -643,7 +654,6 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 
 	sendTime := currentTime()
 	report.SendTime = sendTime
-	log.WithFields(log.Fields{"time": sendTime}).Info("Sending report to server")
 	sendReport(results.EncodeCCResults(&report))
 	// write the file - has a send time
 	b := results.EncodeCCResults(&report)
@@ -697,7 +707,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c8"
+	version := "v1.0-c9"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
