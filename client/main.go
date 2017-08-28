@@ -162,7 +162,10 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	log.Info("About to send start to ping channel")
 	original_start := time.Now()
 	start_ch <- original_start
-	defer func() { end_ch <- time.Time{} }()
+	defer func() {
+		log.Info("Sending end to ping channel")
+		end_ch <- time.Time{}
+	}()
 	log.Info("Sent start to the ping channel")
 
 	// for each flow, start a separate connection to the server to spawn genericCC
@@ -315,6 +318,7 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 		for {
 			select {
 			case <-end_ch:
+				log.Info("Received end from udp measure function")
 				break udpSendloop
 			default:
 				go func(m results.TimeRTTMap) {
@@ -691,7 +695,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c6"
+	version := "v1.0-c7"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
