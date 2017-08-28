@@ -159,10 +159,11 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	flow_times[config.END] = float32(0)
 
 	// send start to ping channel
+	log.Info("About to send start to ping channel")
 	original_start := time.Now()
 	start_ch <- original_start
-	log.Info("Sent start to the ping channel")
 	defer func() { end_ch <- time.Time{} }()
+	log.Info("Sent start to the ping channel")
 
 	// for each flow, start a separate connection to the server to spawn genericCC
 	bytes_received := uint32(0)
@@ -304,7 +305,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time, protocol string, port string) results.TimeRTTMap {
 
 	rtt_dict := results.TimeRTTMap{}
-
+	log.Warn("Ping thread: waiting for start")
 	start := <-start_ch
 
 	// if protocol is UDP -> use separate connections in goroutine
@@ -690,7 +691,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c5"
+	version := "v1.0-c6"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
