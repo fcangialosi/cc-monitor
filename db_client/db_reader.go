@@ -82,9 +82,16 @@ func (s ByFloat32) Less(i, j int) bool {
 func createThroughputDelayLogs(cc *results.CCResults, outfile string) {
 	// for each algorithm in the results -> plot delay over time and throughput over time
 	// ideally will be parsed by an R script to make throughput delay plots
-	for alg, thr := range cc.Throughput {
+  for alg, thr := range cc.Throughput {
 		log.Info("Creating file foor alg ", alg, "outfile ", outfile)
-		algfile := fmt.Sprintf("%s_%s.csv", alg, outfile)
+    inst_algfile := fmt.Sprintf("%s_%s_inst.csv", alg, outfile)
+    inst_algfile_fd, err := os.Create(inst_algfile)
+    checkErrMsg(err, "opening inst csv algfile for writing")
+    defer inst_algfile_fd.Close()
+    inst_w := bufio.NewWriter(inst_algfile_fd)
+    _, err = fmt.Fprintf(inst_w, "count, time, throughput, flow\n")
+
+    algfile := fmt.Sprintf("%s_%s.csv", alg, outfile)
 		algfile_fd, err := os.Create(algfile)
 		log.Info("CSV file is ", algfile)
 		checkErrMsg(err, "opening csv file for writing")
@@ -95,15 +102,34 @@ func createThroughputDelayLogs(cc *results.CCResults, outfile string) {
 		// write header, then parse dictionary and write that out
 		count := 1
 		for flow, flow_thr := range thr {
-			log.WithFields(log.Fields{"flow": flow, "len": len(flow_thr), "alg": alg}).Info("flow throughput")
-			for bytes_rec, file_time := range flow_thr {
-				thr_measurement := float32(bytes_rec) * float32(config.BYTES_TO_MBITS) / (float32(file_time) / 1000) // convert back to ms
+      bytes := make([]uint32, 0)
+			for bytes_rec := range flow_thr {
+				bytes = append(bytes, bytes_rec)
+			}
+			sort.Sort(ByUint32(bytes))
+
+      last_time := float32(0)
+      last_bytes := uint32(0)
+
+      for _, bytes_rec := range bytes {
+        file_time := flow_thr[bytes_rec]
 				flow_str := fmt.Sprintf("flow-%d", flow)
+        // calculate inst throughput
+        dif_time := file_time - last_time
+        if ( dif_time > 100 ) { // only do this around every 100 ms
+          dif_bytes := bytes_rec - last_bytes
+          inst_throughput := float32(dif_bytes) * float32(config.BYTES_TO_MBITS) / (float32(dif_time)/1000)
+          last_time = file_time
+          last_bytes = bytes_rec
+          fmt.Fprintf(inst_w, "%d,%g,%g,%s\n", count, file_time/1000, inst_throughput, flow_str)
+        }
+				thr_measurement := float32(bytes_rec) * float32(config.BYTES_TO_MBITS) / (float32(file_time) / 1000) // convert back to ms
 				fmt.Fprintf(w, "%d,%g,%g,%s\n", count, file_time/1000, thr_measurement, flow_str)
 				count++
 			}
 		}
 		w.Flush()
+    inst_w.Flush()
 	}
 	for alg, alg_onoff := range cc.FlowTimes {
 		// do the delay log file
