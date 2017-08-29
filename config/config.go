@@ -10,9 +10,7 @@ const DB_NAME = "cc_test_data"
 const DB_TABLE_NAME = "cc_results"
 const DB_USERNAME = "user"
 const DB_PASSWORD = "password"
-
-// const IP_LIST_LOCATION = "/home/ubuntu/ip.txt"
-const IP_LIST_LOCATION = "./default.config"
+const IP_LIST_LOCATION = "/home/ubuntu/ip.txt"
 
 // HEADER
 const HEADER_SIZE = 32
@@ -49,8 +47,8 @@ const MIN_OFF_TIME = 500
 const NUM_CYCLES = 3
 const TRANSFER_BUF_SIZE = 2048
 const URL_PREFIX = "http://34.230.33.142:8000"
-const PATH_TO_GRAPH_SCRIPT = "/home/ubuntu/monitor_plots/graph_transfer_data.sh"
-const PATH_TO_GRAPH_THROUGHPUT_SCRIPT = "/home/ubuntu/monitor_plots/graph_throughput.sh"
+const PATH_TO_GRAPH_SCRIPT = "/home/ubuntu/cc-monitor/monitor_plots/graph_transfer_data.sh"
+const PATH_TO_GRAPH_THROUGHPUT_SCRIPT = "/home/ubuntu/cc-monitor/monitor_plots/graph_throughput.sh"
 const PATH_TO_GRAPH_RESULTS = "/home/ubuntu/exp_results"
 const PATH_TO_GENERIC_CC = "/home/ubuntu/genericCC/sender"
 const PATH_TO_REMY_CC = "/home/ubuntu/cc-monitor/rats/140-160.dna.5"
