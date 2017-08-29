@@ -44,26 +44,10 @@ func singleThroughputMeasurement(t float32, bytes_received uint32) float32 {
 /*Measure throughput at increments*/
 func measureThroughput(start time.Time, bytes_received uint32, m results.BytesTimeMap) {
 	cur_time := elapsed(start)
-	//entire_throughput := singleThroughputMeasurement(cur_time, bytes_received)
-	// if bytes_received < 20000 {
-	// 	log.WithFields(log.Fields{"thr": entire_throughput, "time in program": cur_time, "bytes rec so far": bytes_received}).Info("throughput rec")
-	// }
-	// m[bytes_received] = entire_throughput
 	m[bytes_received] = cur_time
-	//log.WithFields(log.Fields{"mbps": singleThroughputMeasurement(time, bytes_received)}).Info()
-	/*received := next_measurement
-	for received <= bytes_received {
-		// add an entry into the map
-		m[received] = entire_throughput
-		received *= 2
-	}*/
-	//return received // return the last received throughput
 }
 
-/*Sends start tcp message to server and records tcp throughput*/
-// NOTE: this function is basically a copy of start_remy, except I didn't want them to use the same function,
-// because the remy function requires the echo packet step, and I didn't want to add a condition to check for - if it's tcp or remy (unnecessary time)
-
+/*Record TCP throughput*/
 func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time, num_cycles int, cycle int) (results.BytesTimeMap, results.OnOffMap, bool) {
 	flow_throughputs := results.BytesTimeMap{}
 	flow_times := results.OnOffMap{}
@@ -105,7 +89,6 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	dline := time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second)
 	conn.SetReadDeadline(dline)
 	// log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
-	//conn.SetReadDeadline(time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second))
 
 	for {
 		//log.Info("Waiting to read")
@@ -128,7 +111,6 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 			dline := time.Now().Add(30 * time.Second)
 			conn.SetReadDeadline(dline)
 			// log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
-			//conn.SetReadDeadline(time.Now().Add(30 * time.Second)) // connection should end 30 seconds from now
 		}
 
 		bytes_received += uint32(n)
@@ -159,14 +141,11 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	flow_times[config.END] = float32(0)
 
 	// send start to ping channel
-	log.Info("About to send start to ping channel")
 	original_start := time.Now()
 	start_ch <- original_start
 	defer func() {
-		log.Info("Sending end to ping channel")
 		end_ch <- time.Time{}
 	}()
-	log.Info("Sent start to the ping channel")
 
 	// for each flow, start a separate connection to the server to spawn genericCC
 	bytes_received := uint32(0)
@@ -215,17 +194,13 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	last_received_time := flow_start
 	flow_times[config.START] = flow_start
 
-	// loop of punching NAT and waiting for a response
-	// log.Info("trying to punch NAT and establish connection")
-
+	// loop of punching NAT and waiting for a responses
 	attempts := 1
 	for {
 		receiver.WriteToUDP([]byte("open seasame"), gccAddr) // just send, ifnore any errors
 		dline := time.Now().Add(config.HALF_MINUTE_TIMEOUT / 6 * time.Second)
 		receiver.SetReadDeadline(dline)
-		// log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
 		attempts++
-		//receiver.SetReadDeadline(time.Now().Add(config.MINUTE_TIMEOUT / 6 * time.Second))
 		n, raddr, err := receiver.ReadFromUDP(recvBuf)
 		if err != nil {
 			if err, ok := err.(net.Error); ok && err.Timeout() {
@@ -242,16 +217,13 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 		}
 		// reset start time
-		// log.Info("Received first data from UDP program")
 		start = time.Now()
 		flow_start = float32(start.Sub(original_start).Seconds() * 1000)
 		last_received_time = flow_start
 		flow_times[config.START] = flow_start
 		// send first echo and break
 		if shouldEcho {
-			//log.Info("echo packet")
 			echo := SetHeaderVal(recvBuf[:n], config.RECEIVE_TIMESTAMP_START, binary.LittleEndian, float64(elapsed(start)))
-			// TODO can just send back the recvbuf
 			receiver.WriteToUDP(echo.Bytes(), raddr)
 		}
 
@@ -262,8 +234,6 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	// initial timeout -> 30 Seconds
 	dline := time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second)
 	receiver.SetReadDeadline(dline)
-	// log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
-	//receiver.SetReadDeadline(time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second))
 
 	for {
 		n, raddr, err := receiver.ReadFromUDP(recvBuf)
@@ -284,9 +254,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 		// echo packet with receive timestamp
 		if shouldEcho {
-			//log.Info("echo packet")
 			echo := SetHeaderVal(recvBuf[:n], config.RECEIVE_TIMESTAMP_START, binary.LittleEndian, float64(elapsed(start)))
-			// TODO can just send back the recvbuf
 			receiver.WriteToUDP(echo.Bytes(), raddr)
 		}
 
@@ -299,7 +267,6 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		"throughput":            fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[bytes_received], bytes_received)),
 	}).Info("Finished Trial")
 
-	//log.Info("Ending connection and putting in timestamps")
 	flow_times[config.END] = last_received_time
 	return flow_throughputs, flow_times, timed_out
 }
@@ -308,7 +275,6 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time, protocol string, port string) results.TimeRTTMap {
 
 	rtt_dict := results.TimeRTTMap{}
-	log.Warn("Ping thread: waiting for start")
 	start := <-start_ch
 
 	// if protocol is UDP -> use separate connections in goroutine
@@ -318,7 +284,6 @@ func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time,
 		for {
 			select {
 			case <-end_ch:
-				log.Info("Received end from udp measure function")
 				break udpSendloop
 			default:
 				go func(m results.TimeRTTMap) {
@@ -407,57 +372,6 @@ sendloop:
 	log.WithFields(log.Fields{"avg_delay_ms": avg_delay}).Info()
 	return rtt_dict
 
-	/*
-				go func(conn net.Conn, end_ch chan time.Time) {
-				sendloop:
-					for {
-						select {
-						case <-end_ch:
-							break sendloop
-						default:
-							send_timestamp := elapsed(start)
-							payload := strconv.FormatFloat(float64(send_timestamp), 'f', -1, 32) + " "
-							conn.Write([]byte(payload))
-						}
-						time.Sleep(time.Millisecond * config.PING_INTERSEND_MS)
-					}
-				}(conn, end_ch)
-
-			recvloop:
-				for {
-					select {
-					case <-end_ch:
-						break recvloop
-					default:
-						recvBuf := make([]byte, config.PING_SIZE_BYTES)
-						conn.SetReadDeadline(time.Now().Add(1 * time.Second))
-						n, err := conn.Read(recvBuf)
-						recv_timestamp := elapsed(start)
-						if err != nil || n <= 0 {
-							if err, ok := err.(net.Error); ok && !err.Timeout() {
-								log.Warn("error reading pings", err)
-							}
-							continue
-						}
-						log.Info(string(recvBuf[:n]))
-						for _, pkt := range strings.Split(string(recvBuf[:n]), " ") {
-							if len(pkt) <= 0 {
-								continue
-							}
-							payload, err := strconv.ParseFloat(pkt, 32)
-							if CheckErrMsg(err, "unable to parse send timestamp in ping") {
-								continue
-							}
-							send_timestamp := float32(payload)
-							rtt := (recv_timestamp - send_timestamp)
-							log.Info(rtt)
-							rtt_dict[send_timestamp] = rtt
-						}
-					}
-				}
-		return rtt_dict
-	*/
-
 }
 
 func runExperiment(f func(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time, num_cycles int, cycle int) (results.BytesTimeMap, results.OnOffMap, bool), IP string, alg string, report *results.CCResults, protocol string, port string, num_cycles int, cycle int) bool {
@@ -537,18 +451,6 @@ func getIPS() (results.IPList, []string, int) {
 
 }
 
-//function to get the public ip address - found online
-func GetOutboundIP() string {
-	conn, err := net.DialTimeout("udp", "8.8.8.8:80", config.CONNECT_TIMEOUT*time.Second)
-	if CheckError(err) {
-		return ""
-	}
-	defer conn.Close()
-	localAddr := conn.LocalAddr().String()
-	idx := strings.LastIndex(localAddr, ":")
-	return localAddr[0:idx]
-}
-
 func getSendTimeLocalFile(localResultsStorage string) string { // if there is a localResults file, get the sendTime
 	bytes, err := ioutil.ReadFile(localResultsStorage)
 	if err != nil {
@@ -582,7 +484,6 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 		bytes, err := ioutil.ReadFile(localResultsStorage)
 		if err == nil {
 			savedBytes = bytes
-			// log.Info("Len of saved bytes ", len(savedBytes))
 		} else {
 			log.Warn("err: ", err)
 		}
@@ -599,8 +500,6 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 	// try to read the temporary results file - and check whether it is for this machine
 	// also check if the record flag is turned on
 	useTemp := (tempReport.ServerIP == IP && record)
-
-	// open a temporary file to write the results in
 
 	for _, full_alg := range algs {
 		alg := strings.SplitN(full_alg, "-", 2)[1]
@@ -633,7 +532,6 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 
 			if proto == "tcp" {
 				runExperiment(measureTCP2, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, 1, cycle)
-				//runExperiment(measureUDP2, IP, "remy=bigbertha-100x.dna.5", &report, "udp", config.PING_TCP_SERVER_PORT, 1, cycle)
 			} else if proto == "udp" {
 				runExperiment(measureUDP2, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, 1, cycle)
 			} else {
@@ -646,9 +544,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 			err := ioutil.WriteFile(localResultsStorage, b, 0777)
 			CheckErrMsg(err, "Writing file into bytes")
 			place++
-
 		}
-
 		cycle++
 	}
 
@@ -659,7 +555,6 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 	b := results.EncodeCCResults(&report)
 	err := ioutil.WriteFile(localResultsStorage, b, 0777)
 	CheckErrMsg(err, "Writing file into bytes")
-	// TODO: write version that writes progress into "progress file" as well
 	return sendTime, place
 }
 
@@ -707,12 +602,12 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c10"
+	version := "v1.0-c11"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
 
-	log.Info("This script will contact different servers to transfer data using different congestion control algorithms, and records data about the performance of each algorithm. It may take around 10 minutes. We're trying to guage the performance of an algorithm designed by Remy, a program that automatically generates congestion control algorithms based on input parameters.")
+	log.Info("This script will contact different servers to transfer data using different congestion control algorithms, and records data about the performance of each algorithm. It may take around 10-15 minutes. We're trying to guage the performance of an algorithm designed by Remy, a program that automatically generates congestion control algorithms based on input parameters.")
 	log.Warn("In case the script doesn't run fully, it will write partial results to /tmp/cc-client_results-IP.log and /tmp/cc-client_progress.log in order to checkpoint progress. Next time the script runs, it will pick up from this progress")
 	// look for a local progress file -> just lists IPs the results have been sent to
 	// on completing a full run, will delete the file
@@ -723,7 +618,6 @@ func main() {
 		progressFile, err = os.OpenFile(config.LOCAL_PROGRESS_FILE, os.O_RDWR, 0644)
 		CheckErrMsg(err, "opening local progress file")
 		scanner := bufio.NewScanner(progressFile)
-		// log.Info("local progress file exists")
 		for scanner.Scan() {
 			finishedIPs = append(finishedIPs, scanner.Text())
 		}
@@ -756,7 +650,7 @@ func main() {
 		var ip_order []string
 		var num_cycles int
 		if *local_iplist != "" {
-			// TODO check if file eists, error if not
+			// TODO check if file exists, error if not
 			// TODO read file, error if bad format
 			ip_map, ip_order, num_cycles = results.GetIPList(*local_iplist)
 		} else {
