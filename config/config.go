@@ -77,7 +77,7 @@ const UDP = "udp"
 
 // timeout for reading
 const CLIENT_TIMEOUT = 10 // 10 seconds before the client times out
-const TCP_TIMEOUT = 2     // 1 second to try to get data
+const TCP_TIMEOUT = 15    // 1 second to try to get data
 const MINUTE_TIMEOUT = 60
 const HALF_MINUTE_TIMEOUT = 30
 const CONNECT_TIMEOUT = 10
