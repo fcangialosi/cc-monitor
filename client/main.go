@@ -407,7 +407,7 @@ func runExperiment(f func(server_ip string, alg string, start_ch chan time.Time,
 }
 
 func sendReport(report []byte) {
-	log.Info("Sending report to server: size ", len(report))
+	log.Info("Sending report to server")
 	conn, err := net.DialTimeout("tcp", config.DB_IP+":"+config.DB_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
 	if CheckError(err) {
 		return
@@ -602,7 +602,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c16"
+	version := "v1.0-c17"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
