@@ -86,7 +86,7 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 	// set first deadline for 30 seconds, then 30 seconds after
 	started_flow := false
-	dline := time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second)
+	dline := time.Now().Add(config.CLIENT_TIMEOUT * time.Second)
 	conn.SetReadDeadline(dline)
 	// log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
 
@@ -108,7 +108,7 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 		if !started_flow {
 			started_flow = true
-			dline := time.Now().Add(30 * time.Second)
+			dline := time.Now().Add(config.CLIENT_TIMEOUT * time.Second)
 			conn.SetReadDeadline(dline)
 			// log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
 		}
@@ -232,7 +232,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	}
 
 	// initial timeout -> 30 Seconds
-	dline := time.Now().Add(config.HALF_MINUTE_TIMEOUT * time.Second)
+	dline := time.Now().Add(config.CLIENT_TIMEOUT * time.Second)
 	receiver.SetReadDeadline(dline)
 
 	for {
@@ -602,7 +602,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c17"
+	version := "v1.0-c18"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
