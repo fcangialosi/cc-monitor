@@ -158,6 +158,7 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		time.Sleep(2 * time.Second)
 		return flow_throughputs, flow_times, true
 	}
+
 	defer conn.Close()
 
 	// create UDP listening port
@@ -189,6 +190,23 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	if CheckErrMsg(err, "resolving addr to generic CC port given") {
 		return flow_throughputs, flow_times, true
 	}
+
+	// have a go function now that listens on this for the loss rate and RTT Info from the connection
+	lossRateChan := make(chan float64)
+	go func() {
+		// if for some reason - function returns in an error EARLY, conn will close and this goroutine will return because of EOF
+
+		bytes, errr := conn.Read(recvBuf)
+		if errr != nil {
+			log.Warn("Error reading from TCP connection for loss RTT info: ", errr)
+			lossRateChan <- float64(0)
+			return
+		}
+		info := results.DecodeLossRTTInfo(recvBuf[:bytes])
+		lossRateChan <- info.LossRate
+		return
+	}()
+
 	start := time.Now()
 	flow_start := float32(start.Sub(original_start).Seconds() * 1000)
 	last_received_time := flow_start
@@ -259,12 +277,16 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		}
 
 	}
+
+	// read from the buffer to get the lossRate Info
+	lossRate := <-lossRateChan
 	log.WithFields(log.Fields{
 		"trial":                 cycle + 1,
 		"bytes_received":        fmt.Sprintf("%.3f MBytes", float64(bytes_received)/1000000.0),
 		"last_received_data_at": time.Duration(flow_throughputs[bytes_received]) * time.Millisecond,
 		"time_elapsed":          elapsed(start) / 1000,
 		"throughput":            fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[bytes_received], bytes_received)),
+		"loss rate":             lossRate,
 	}).Info("Finished Trial")
 
 	flow_times[config.END] = last_received_time
@@ -602,7 +624,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c20"
+	version := "v1.0-c21"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
