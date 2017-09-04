@@ -76,10 +76,11 @@ func openUDPServer() {
 			clientIPPort := conn.RemoteAddr().String()
 			clientIP := strings.Split(clientIPPort, ":")[0] // of form IP:port
 			log.WithFields(log.Fields{"client ip": clientIP}).Info("client IP")
-			lossRate := runGCC(srcport, clientIP, alg)
+			lossRate, delayMap := runGCC(srcport, clientIP, alg)
+			log.Info("Delay map: ", delayMap)
 			// can close TCP connection after writing the loss rate back
 			log.Info("Loss rate: ", lossRate)
-			info := results.LossRTTInfo{LossRate: lossRate, Delay: results.OnOffMap{}}
+			info := results.LossRTTInfo{LossRate: lossRate, Delay: delayMap}
 			conn.Write(results.EncodeLossRTTInfo(&info))
 		}(conn)
 
@@ -223,7 +224,7 @@ sendloop:
 	return
 }
 
-func runGCC(srcport string, ip string, alg string) float64 {
+func runGCC(srcport string, ip string, alg string) (float64, results.TimeRTTMap) {
 	log.Info(alg)
 	udp_alg := "remy"
 	alg_path := strings.Split(alg, "->")[0]
@@ -279,7 +280,7 @@ func runGCC(srcport string, ip string, alg string) float64 {
 		logfile, err := os.Open(logfileName)
 		if err != nil {
 			log.Warn(err)
-			return lossRate
+			return lossRate, results.TimeRTTMap{}
 		}
 		defer func() {
 			logfile.Close()
@@ -290,26 +291,38 @@ func runGCC(srcport string, ip string, alg string) float64 {
 
 		scanner := bufio.NewScanner(logfile)
 		lossRate := float64(0)
-		logfileData := make([]float64, 0)
+		lossData := make([]float64, 0)
+		rttDict := results.TimeRTTMap{}
+		lines := make([]string, 0)
 		for scanner.Scan() {
 			line := scanner.Text()
-			lossRate, _ := strconv.ParseFloat(line, 64)
-			log.Info("Loss rate is: ", lossRate)
-			logfileData = append(logfileData, lossRate)
+			lines = append(lines, line)
 		}
-		lossRate = logfileData[0]
+		for _, line := range lines {
+			log.Info(line)
+			broken := strings.Split(line, ",")
+			if len(broken) == 2 {
+				sendtime, _ := strconv.ParseFloat(strings.Split(line, ",")[0], 64)
+				rtt, _ := strconv.ParseFloat(strings.Split(line, ",")[1], 64)
+				rttDict[float32(sendtime)] = float32(rtt)
+			} else {
+				lossRate, _ := strconv.ParseFloat(line, 64)
+				lossData = append(lossData, lossRate)
+			}
+		}
+		lossRate = lossData[0]
 
 		if err := scanner.Err(); err != nil {
 			log.Warn(err)
-			return lossRate
+			return lossRate, rttDict
 		}
 		log.Info("Finished handling request UDP, lossRATE: ", lossRate)
-		return lossRate
+		return lossRate, rttDict
 	default:
 		log.WithFields(log.Fields{"alg": alg}).Error("udp algorithm not implemented")
 	}
 	log.Info("Finished handling request UDP, lossRATE: ", lossRate)
-	return lossRate
+	return lossRate, results.TimeRTTMap{}
 }
 
 func main() {
