@@ -21,6 +21,11 @@ type GraphInfo struct { // info about the server and time sent to get the correc
 	ServerIP string
 	SendTime string
 }
+
+type LossRTTInfo struct {
+	LossRate float64
+	Delay    OnOffMap
+}
 type CCResults struct {
 	ServerIP   string
 	ClientIP   string
@@ -28,6 +33,27 @@ type CCResults struct {
 	Delay      map[string][]TimeRTTMap
 	FlowTimes  map[string][]OnOffMap // list of times when the flows "on" started
 	SendTime   string                // string of when client sent this result to the DB
+}
+
+func EncodeLossRTTInfo(info *LossRTTInfo) []byte {
+	w := new(bytes.Buffer)
+	e := gob.NewEncoder(w)
+	e.Encode(info.LossRate)
+	e.Encode(info.Delay)
+	return w.Bytes()
+}
+
+func DecodeLossRTTInfo(data []byte) LossRTTInfo {
+	info := LossRTTInfo{}
+	r := bytes.NewBuffer(data)
+	if data == nil || len(data) < 1 {
+		log.Error("Error decoding LossRTT info into struct")
+		return info
+	}
+	d := gob.NewDecoder(r)
+	d.Decode(&info.LossRate)
+	d.Decode(&info.Delay)
+	return info
 }
 
 /* This struct is different because it contains the results for an individual algorithm*/
