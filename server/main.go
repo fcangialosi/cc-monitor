@@ -1,6 +1,12 @@
 package main
 
 import (
+	"../config"
+	"../results"
+	"bufio"
+	"fmt"
+	_ "github.com/go-sql-driver/mysql"
+	log "github.com/sirupsen/logrus"
 	"io"
 	"math/rand"
 	"net"
@@ -10,10 +16,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	"../config"
-	_ "github.com/go-sql-driver/mysql"
-	log "github.com/sirupsen/logrus"
 )
 
 var sendBuf []byte = make([]byte, config.TCP_TRANSFER_SIZE)
@@ -74,8 +76,11 @@ func openUDPServer() {
 			clientIPPort := conn.RemoteAddr().String()
 			clientIP := strings.Split(clientIPPort, ":")[0] // of form IP:port
 			log.WithFields(log.Fields{"client ip": clientIP}).Info("client IP")
-			runGCC(srcport, clientIP, alg)
-			// can close TCP connection
+			lossRate := runGCC(srcport, clientIP, alg)
+			// can close TCP connection after writing the loss rate back
+			log.Info("Loss rate: ", lossRate)
+			info := results.LossRTTInfo{LossRate: lossRate, Delay: results.OnOffMap{}}
+			conn.Write(results.EncodeLossRTTInfo(&info))
 		}(conn)
 
 	}
@@ -138,6 +143,10 @@ func pingServerUDP() {
 		}(server, raddr, p)
 	}
 
+}
+func currentTime() string {
+	hour, min, sec := time.Now().Clock()
+	return fmt.Sprintf("%d.%d.%d", hour, min, sec)
 }
 
 func measureServerTCP() {
@@ -214,7 +223,7 @@ sendloop:
 	return
 }
 
-func runGCC(srcport string, ip string, alg string) {
+func runGCC(srcport string, ip string, alg string) float64 {
 	log.Info(alg)
 	udp_alg := "remy"
 	alg_path := strings.Split(alg, "->")[0]
@@ -227,7 +236,9 @@ func runGCC(srcport string, ip string, alg string) {
 	off_time := strconv.Itoa(0)   // have a 0 off time
 	num_cycles := strconv.Itoa(1) // send for 1 on and off period
 	log.WithFields(log.Fields{"num cycles": num_cycles}).Info("num cycles")
-
+	currentTime := currentTime()
+	logfileName := fmt.Sprintf("%s_%s.log", ip, currentTime)
+	lossRate := float64(0)
 	if len(strings.Split(alg_path, "=")) == 4 {
 		// train length and linkspeed provided
 		trainLength = strings.Split(alg_path, "=")[2]
@@ -255,6 +266,7 @@ func runGCC(srcport string, ip string, alg string) {
 			"linkrate=" + linkRate,
 			"traffic_params=deterministic,num_cycles=" + num_cycles,
 			"if=" + path,
+			"logfile=" + logfileName,
 		}
 		// TODO remove stdout when done testing
 		cmd := exec.Command(config.PATH_TO_GENERIC_CC, args...)
@@ -264,11 +276,40 @@ func runGCC(srcport string, ip string, alg string) {
 			log.Error(err)
 		}
 		log.Info("Done with genericCC program")
-		// server.WriteToUDP([]byte(config.FIN), raddr)
+		logfile, err := os.Open(logfileName)
+		if err != nil {
+			log.Warn(err)
+			return lossRate
+		}
+		defer func() {
+			logfile.Close()
+			if _, err := os.Stat(logfileName); !os.IsNotExist(err) {
+				os.Remove(logfileName)
+			}
+		}()
+
+		scanner := bufio.NewScanner(logfile)
+		lossRate := float64(0)
+		logfileData := make([]float64, 0)
+		for scanner.Scan() {
+			line := scanner.Text()
+			lossRate, _ := strconv.ParseFloat(line, 64)
+			log.Info("Loss rate is: ", lossRate)
+			logfileData = append(logfileData, lossRate)
+		}
+		lossRate = logfileData[0]
+
+		if err := scanner.Err(); err != nil {
+			log.Warn(err)
+			return lossRate
+		}
+		log.Info("Finished handling request UDP, lossRATE: ", lossRate)
+		return lossRate
 	default:
 		log.WithFields(log.Fields{"alg": alg}).Error("udp algorithm not implemented")
 	}
-	log.Info("Finished handling request UDP")
+	log.Info("Finished handling request UDP, lossRATE: ", lossRate)
+	return lossRate
 }
 
 func main() {
