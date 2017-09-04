@@ -24,7 +24,7 @@ type GraphInfo struct { // info about the server and time sent to get the correc
 
 type LossRTTInfo struct {
 	LossRate float64
-	Delay    OnOffMap
+	Delay    TimeRTTMap
 }
 type CCResults struct {
 	ServerIP   string
