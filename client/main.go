@@ -144,10 +144,10 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 	// send start to ping channel
 	original_start := time.Now()
-	start_ch <- original_start
-	defer func() {
-		end_ch <- time.Time{}
-	}()
+	// start_ch <- original_start
+	// defer func() {
+	// 	end_ch <- time.Time{}
+	// }()
 
 	// for each flow, start a separate connection to the server to spawn genericCC
 	bytes_received := uint32(0)
@@ -292,13 +292,13 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		count++
 	}
 	log.WithFields(log.Fields{
-		"trial":                          cycle + 1,
-		"bytes_received":                 fmt.Sprintf("%.3f MBytes", float64(bytes_received)/1000000.0),
-		"last_received_data_at":          time.Duration(flow_throughputs[bytes_received]) * time.Millisecond,
-		"time_elapsed":                   elapsed(start) / 1000,
-		"throughput":                     fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[bytes_received], bytes_received)),
-		"loss rate":                      lossRate,
-		"avg delay calculated by server": delaySum / count,
+		"trial":                 cycle + 1,
+		"bytes_received":        fmt.Sprintf("%.3f MBytes", float64(bytes_received)/1000000.0),
+		"last_received_data_at": time.Duration(flow_throughputs[bytes_received]) * time.Millisecond,
+		"time_elapsed":          elapsed(start) / 1000,
+		"throughput":            fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[bytes_received], bytes_received)),
+		"loss rate":             lossRate,
+		"avg delay":             fmt.Sprintf("%.3f ms", delaySum/count),
 	}).Info("Finished Trial")
 
 	flow_times[config.END] = last_received_time
@@ -424,12 +424,14 @@ func runExperiment(f func(server_ip string, alg string, start_ch chan time.Time,
 		throughput, flow_times, time_map, timed_out = f(IP, alg, start_ping, end_ping, num_cycles, cycle)
 	}(&wg)
 
-	wg.Add(1)
-	go func(wg *sync.WaitGroup) {
-		defer wg.Done()
-		ping_results = sendPings(IP, start_ping, end_ping, protocol, port)
-	}(&wg)
+	if protocol != config.UDP { // only use separate pinging for TCP now
+		wg.Add(1)
+		go func(wg *sync.WaitGroup) {
+			defer wg.Done()
+			ping_results = sendPings(IP, start_ping, end_ping, protocol, port)
+		}(&wg)
 
+	}
 	wg.Wait()
 
 	if !timed_out {
@@ -640,7 +642,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c24"
+	version := "v1.0-c25"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
