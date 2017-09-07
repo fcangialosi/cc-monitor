@@ -4,10 +4,12 @@ import (
 	"../config"
 	"../results"
 	"bufio"
+	"bytes"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	log "github.com/sirupsen/logrus"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"net"
 	"os"
@@ -22,7 +24,46 @@ var sendBuf []byte = make([]byte, config.TCP_TRANSFER_SIZE)
 var rng *rand.Rand
 
 /*****************************************************************************/
+/*Taken from a stack overflow post for exec'ing commands in go with pipes*/
+func Execute(output_buffer *bytes.Buffer, stack ...*exec.Cmd) (err error) {
+	var error_buffer bytes.Buffer
+	pipe_stack := make([]*io.PipeWriter, len(stack)-1)
+	i := 0
+	for ; i < len(stack)-1; i++ {
+		stdin_pipe, stdout_pipe := io.Pipe()
+		stack[i].Stdout = stdout_pipe
+		stack[i].Stderr = &error_buffer
+		stack[i+1].Stdin = stdin_pipe
+		pipe_stack[i] = stdout_pipe
+	}
+	stack[i].Stdout = output_buffer
+	stack[i].Stderr = &error_buffer
 
+	if err := call(stack, pipe_stack); err != nil {
+		log.Fatalln(string(error_buffer.Bytes()), err)
+	}
+	return err
+}
+
+func call(stack []*exec.Cmd, pipes []*io.PipeWriter) (err error) {
+	if stack[0].Process == nil {
+		if err = stack[0].Start(); err != nil {
+			return err
+		}
+	}
+	if len(stack) > 1 {
+		if err = stack[1].Start(); err != nil {
+			return err
+		}
+		defer func() {
+			if err == nil {
+				pipes[0].Close()
+				err = call(stack[1:], pipes[1:])
+			}
+		}()
+	}
+	return stack[0].Wait()
+}
 func init() {
 	rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 }
@@ -170,7 +211,97 @@ func measureServerTCP() {
 	}
 }
 
+func srttInfoServer() {
+	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.SRTT_INFO_PORT)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	server, err := net.ListenTCP("tcp", laddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for {
+		conn, err := server.AcceptTCP()
+		if err != nil {
+			log.Warning(err)
+		}
+		go handleSRTTRequest(conn)
+	}
+}
+func handleSRTTRequest(conn *net.TCPConn) {
+	defer conn.Close()
+	clientIPPort := conn.RemoteAddr().String()
+	clientIP := strings.Split(clientIPPort, ":")[0]
+	reqBuf := make([]byte, config.MAX_REQ_SIZE)
+	n, err := conn.Read(reqBuf)
+	timePort := string(reqBuf[:n])
+	curTime := strings.Split(timePort, "->")[0]
+	clientPort := strings.Split(timePort, "->")[1]
+
+	// filename = IP_time_tcpprobe.log
+	tcpprobeInfo := fmt.Sprintf("%s_%s_tcpprobe.log", clientIP, curTime)
+
+	// manually PARSE the file for the srtt info and get an array of RTTs
+	// open the tcpprobe file line by line and read it
+	open := false
+	tries := 0
+	for !(open) && tries < 5 {
+		if _, err := os.Stat(tcpprobeInfo); os.IsNotExist(err) {
+			tries++
+			time.Sleep(time.Second * 2)
+		} else {
+			open = true
+		}
+	}
+	emptyRet := results.LossRTTInfo{Delay: results.TimeRTTMap{}, LossRate: 0}
+	if tries >= 5 {
+		conn.Write(results.EncodeLossRTTInfo(&emptyRet))
+		return
+	}
+	probeFile, err := os.Open(tcpprobeInfo)
+	if err != nil {
+		log.Warn("err on opening file: ", err)
+		conn.Write(results.EncodeLossRTTInfo(&emptyRet))
+		return
+	}
+	defer probeFile.Close()
+	scanner := bufio.NewScanner(probeFile)
+	rttDict := make(map[float32]float32)
+	firstTimestamp := float64(0)
+	for scanner.Scan() {
+		line := scanner.Text()
+		brokenLine := strings.Split(line, " ")
+		if !(strings.Contains(line, "ffff")) { // to be able to parse for mahimahi correctly
+			continue
+		}
+		// check client port is in the RCV field, as it could show up in the timestamp field
+		rcvField := brokenLine[2]
+		if !(strings.Contains(rcvField, clientPort)) {
+			continue
+		}
+		timestamp, _ := strconv.ParseFloat(brokenLine[0], 64)
+		srtt, _ := strconv.ParseFloat(brokenLine[9], 64)
+		if firstTimestamp == float64(0) {
+			firstTimestamp = timestamp
+		}
+		//log.WithFields(log.Fields{"first": firstTimestamp, "srtt": srtt / 1000, "timestamp": (timestamp - firstTimestamp)}).Info("stuff")
+		rttDict[float32((timestamp - firstTimestamp))] = float32(srtt / 1000)
+	}
+
+	// need to send back this rttDict
+	lossRTTInfo := results.LossRTTInfo{LossRate: 0, Delay: rttDict}
+	conn.Write(results.EncodeLossRTTInfo(&lossRTTInfo))
+	// then delete the file
+	os.Remove(tcpprobeInfo)
+	return
+}
 func handleRequestTCP(conn *net.TCPConn) {
+	clientIPPort := conn.RemoteAddr().String()
+	clientIP := strings.Split(clientIPPort, ":")[0]
+	clientPort := strings.Split(clientIPPort, ":")[1]
+	log.Info("Client port is: ", clientIPPort)
 	startBuf := []byte("START_FLOW")
 	reqBuf := make([]byte, config.MAX_REQ_SIZE)
 	n, err := conn.Read(reqBuf)
@@ -182,7 +313,9 @@ func handleRequestTCP(conn *net.TCPConn) {
 		return
 	}
 
-	req := string(reqBuf[:n])
+	reqTime := string(reqBuf[:n])
+	req := strings.Split(reqTime, "->")[0]
+	curTime := strings.Split(reqTime, "->")[1]
 
 	file, err := conn.File()
 	if err != nil {
@@ -212,6 +345,7 @@ sendloop:
 	for {
 		select {
 		case <-on_timer:
+			log.Info("closing?")
 			break sendloop
 		default:
 			//log.Warn("Waiting to write to TCP connection")
@@ -219,8 +353,24 @@ sendloop:
 		}
 	}
 	log.Info("Done. Closing connection...")
-	err = conn.Close()
+	// now run grep command to get all the SRTT estimates and output it to a file
+	//curTime := currentTime()
+	parseString := clientPort
+	// NOTE: for mahimahi, grepping for client port will result in lines both from server -> NAT and NAT -> client
+	// we would want NAT -> client lines -> so hack, just check for "ffff"
+	var b bytes.Buffer
+	if err := Execute(&b,
+		exec.Command("/bin/cat", config.SERVER_TCPPROBE_OUTPUT),
+		exec.Command("/bin/grep", parseString),
+	); err != nil {
+		log.Fatal(err)
+	}
+	tcpprobeInfo := fmt.Sprintf("%s_%s_tcpprobe.log", clientIP, curTime)
+	err = ioutil.WriteFile(tcpprobeInfo, b.Bytes(), 0644)
 
+	if err != nil {
+		log.Warn(err)
+	}
 	return
 }
 
@@ -332,6 +482,7 @@ func main() {
 	go pingServerTCP()    // TCP pings
 	go measureServerTCP() // Measure TCP throughput
 	go openUDPServer()    // open port to measure UDP throughput
+	go srttInfoServer()   // read the tcp probe output files, parse srtt array, and delete logfiles
 
 	<-quit
 }

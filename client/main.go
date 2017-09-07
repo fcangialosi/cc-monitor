@@ -56,8 +56,8 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	flow_times[config.END] = float32(0)
 
 	original_start := time.Now()
-	start_ch <- original_start // start pings now
-	defer func() { end_ch <- time.Time{} }()
+	//start_ch <- original_start // start pings now
+	//defer func() { end_ch <- time.Time{} }()
 
 	// loop over each cycle and request TCP server for "1" on and off
 	last_received_time := float32(0)
@@ -70,7 +70,10 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		time.Sleep(2 * time.Second)
 		return flow_throughputs, flow_times, delay, true
 	}
-	conn.Write([]byte(alg))
+	// write timestamp for server to be able to identify this client connection later
+	curTime := currentTime()
+	algTime := fmt.Sprintf("%s->%s", alg, curTime)
+	conn.Write([]byte(algTime))
 	// now wait for start
 	n, err := conn.Read(recvBuf)
 	if string(recvBuf[:n]) != config.START_FLOW {
@@ -89,6 +92,7 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	started_flow := false
 	dline := time.Now().Add(config.CLIENT_TIMEOUT * time.Second)
 	conn.SetReadDeadline(dline)
+	localPort := strings.Split(conn.LocalAddr().String(), ":")[1]
 	// log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
 
 	for {
@@ -119,12 +123,40 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 		measureThroughput(start, bytes_received, flow_throughputs)
 
 	}
+	conn2, err := net.DialTimeout("tcp", server_ip+":"+config.SRTT_INFO_PORT, config.CONNECT_TIMEOUT*time.Second)
+	if CheckErrMsg(err, "tcp connection to server") {
+		time.Sleep(2 * time.Second)
+		return flow_throughputs, flow_times, delay, true
+	}
+	// else get the delay estimates from server
+	infoBuf := make([]byte, 0)
+	curtimePort := fmt.Sprintf("%s->%s", curTime, localPort)
+	conn2.Write([]byte(curtimePort))
+	// read until the buf is full
+	for {
+		n, err = conn2.Read(recvBuf)
+		if err == io.EOF {
+			break
+		}
+		infoBuf = append(infoBuf, recvBuf[:n]...)
+	}
+	lossRTTInfo := results.DecodeLossRTTInfo(infoBuf)
+	delay = lossRTTInfo.Delay
+
+	// get avg delay
+	fullDelay := float32(0)
+	count := float32(0)
+	for _, del := range delay {
+		fullDelay += del
+		count++
+	}
 	log.WithFields(log.Fields{
-		"trial":                 cycle + 1,
-		"bytes_received":        fmt.Sprintf("%.3f MBytes", float64(bytes_received)/1000000.0),
-		"last_received_data_at": time.Duration(flow_throughputs[bytes_received]) * time.Millisecond,
-		"time_elapsed":          elapsed(start) / 1000,
-		"throughput":            fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[bytes_received], bytes_received)),
+		"trial":                             cycle + 1,
+		"bytes_received":                    fmt.Sprintf("%.3f MBytes", float64(bytes_received)/1000000.0),
+		"last_received_data_at":             time.Duration(flow_throughputs[bytes_received]) * time.Millisecond,
+		"time_elapsed":                      elapsed(start) / 1000,
+		"throughput":                        fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[bytes_received], bytes_received)),
+		"avg delay as calculated by server": fmt.Sprintf("%.3f ms", fullDelay/count),
 	}).Info("Finished Trial")
 
 	flow_times[config.END] = last_received_time
@@ -424,7 +456,7 @@ func runExperiment(f func(server_ip string, alg string, start_ch chan time.Time,
 		throughput, flow_times, time_map, timed_out = f(IP, alg, start_ping, end_ping, num_cycles, cycle)
 	}(&wg)
 
-	if protocol != config.UDP { // only use separate pinging for TCP now
+	if protocol != config.UDP && protocol != config.TCP { // only use separate pinging for TCP now
 		wg.Add(1)
 		go func(wg *sync.WaitGroup) {
 			defer wg.Done()
@@ -437,10 +469,7 @@ func runExperiment(f func(server_ip string, alg string, start_ch chan time.Time,
 	if !timed_out {
 		report.Throughput[alg][cycle] = throughput
 		report.FlowTimes[alg][cycle] = flow_times
-		report.Delay[alg][cycle] = ping_results
-		if len(time_map) > 0 && protocol == config.UDP {
-			report.Delay[alg][cycle] = time_map
-		}
+		report.Delay[alg][cycle] = time_map
 	}
 	return timed_out
 
@@ -642,7 +671,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.0-c25"
+	version := "v1.0-c26"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
@@ -673,14 +702,14 @@ func main() {
 	progressWriter := bufio.NewWriter(progressFile)
 
 	// Default to just Remy and TCP Cubic
-	algs := []string{"udp-remy=bigbertha-100x.dna.5", "tcp-cubic"}
+	algs := []string{"tcp-cubic"}
 
 	if *use_mm {
 		mahimahi := os.Getenv("MAHIMAHI_BASE")
 		if *manual_algs != "" {
 			algs = strings.Split(*manual_algs, ",")
 		}
-		num_cycles := 2
+		num_cycles := 1
 		if *cycles != 0 {
 			num_cycles = *cycles
 		}

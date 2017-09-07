@@ -29,6 +29,7 @@ const MAX_PORT = 65535
 const OPEN_UDP_PORT = "10105"
 const DB_GRAPH_PORT = "10105"
 const CLIENT_UDP_PORT = "9876"
+const SRTT_INFO_PORT = "10106"
 
 // Ping server constants
 const PING_SIZE_BYTES = 1280
@@ -37,7 +38,7 @@ const PING_INTERSEND_MS = 500
 // Measure server constants
 const LARGE_BUF_SIZE = 4096
 const TCP_BUF_SIZE = 4096
-const TCP_TRANSFER_SIZE = 1000000000
+const TCP_TRANSFER_SIZE = 20000
 const MAX_REQ_SIZE = 128
 const TCP_CONGESTION = 0xd
 const MEAN_ON_TIME_MS = 10000
@@ -86,3 +87,4 @@ const MAX_CONNECT_ATTEMPTS = 6
 // files
 const LOCAL_PROGRESS_FILE = "/tmp/cc-client_progress.log"
 const LOCAL_RESULTS_FILE = "/tmp/cc-client_results.log"
+const SERVER_TCPPROBE_OUTPUT = "/tmp/tcpprobe.out"
