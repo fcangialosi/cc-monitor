@@ -148,10 +148,8 @@ func createThroughputDelayLogs(cc *results.CCResults, outfile string) {
 			flow_str := fmt.Sprintf("flow-%d", flow)
 			log.WithFields(log.Fields{"start": flow_start, "end": flow_end}).Info("flow startt and end")
 			for sendtime, rtt := range delay_map {
-				if sendtime >= flow_start && sendtime <= flow_end {
-					fmt.Fprintf(wd, "%d,%g,%g,%s\n", count, (sendtime-flow_start)/1000, rtt, flow_str)
+					fmt.Fprintf(wd, "%d,%g,%g,%s\n", count, (sendtime)/1000, rtt, flow_str)
 					count++
-				}
 			}
 		}
 		wd.Flush()
