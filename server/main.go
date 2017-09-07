@@ -287,7 +287,7 @@ func handleSRTTRequest(conn *net.TCPConn) {
 			firstTimestamp = timestamp
 		}
 		//log.WithFields(log.Fields{"first": firstTimestamp, "srtt": srtt / 1000, "timestamp": (timestamp - firstTimestamp)}).Info("stuff")
-		rttDict[float32((timestamp - firstTimestamp))] = float32(srtt / 1000)
+		rttDict[float32((timestamp-firstTimestamp)*1000)] = float32(srtt / 1000)
 	}
 
 	// need to send back this rttDict
