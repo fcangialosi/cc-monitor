@@ -229,15 +229,16 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	lossRateChan := make(chan results.LossRTTInfo)
 	go func() {
 		// if for some reason - function returns in an error EARLY, conn will close and this goroutine will return because of EOF
-
-		bytes, errr := conn.Read(recvBuf)
-		if errr != nil {
-			log.Warn("Error reading from TCP connection for loss RTT info: ", errr)
-			ret := results.LossRTTInfo{LossRate: 0, Delay: results.TimeRTTMap{}}
-			lossRateChan <- ret
-			return
+		infoBuf := make([]byte, 0)
+		for {
+			bytes, errr := conn.Read(recvBuf)
+			if errr != nil {
+				// hopefully an EOF
+				break
+			}
+			infoBuf = append(infoBuf, recvBuf[:bytes]...)
 		}
-		info := results.DecodeLossRTTInfo(recvBuf[:bytes])
+		info := results.DecodeLossRTTInfo(infoBuf)
 		lossRateChan <- info
 		return
 	}()
