@@ -130,6 +130,14 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 			if err != nil {
 				log.WithFields(log.Fields{"err": err, "path": path}).Panic("Creating path to store results")
 			}
+
+			args_string := fmt.Sprintf("\"mv %s/%s-%s/* %s\"", config.DB_SERVER_CCP_TMP, client_ip, server_ip, path)
+			mv := exec.Command("/bin/bash", "-c", args_string)
+			if err := mv.Run(); err != nil {
+				log.Error("error moving ccp logs")
+				log.Error(err)
+			}
+
 			full_path := path + "/" + filename
 			f, err := os.Create(full_path)
 			checkErrMsg(err, "creating file for path "+full_path)
@@ -207,13 +215,13 @@ func getGraphInfo(ip_file string) {
 			checkErrMsg(err, "reading URL prefix string")
 			report := results.DecodeGraphInfo(p[:n])
 			server_ip := report.ServerIP
-			server_file := fmt.Sprintf("%s_logs", server_ip)
+			server_file := fmt.Sprintf("%s", server_ip)
 			current_time := report.SendTime
 			current_date := currentDate()
 
 			location := getIPLocation(ip_file, server_ip)
 			if location != "NOT_FOUND" {
-				server_file = fmt.Sprintf("%s_logs", location)
+				server_file = fmt.Sprintf("%s", location)
 			}
 			path := fmt.Sprintf("%s/%s/%s", server_file, current_date, current_time)
 			// find the correct URL and return

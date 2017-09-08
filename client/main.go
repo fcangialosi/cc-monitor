@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"gopkg.in/yaml.v2"
+
 	"../config"
 	"../results"
 	log "github.com/sirupsen/logrus"
@@ -72,7 +74,7 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	}
 	// write timestamp for server to be able to identify this client connection later
 	curTime := currentTime()
-	algTime := fmt.Sprintf("%s->%s", alg, curTime)
+	algTime := fmt.Sprintf("%s %s", curTime, alg)
 	conn.Write([]byte(algTime))
 	// now wait for start
 	n, err := conn.Read(recvBuf)
@@ -499,6 +501,7 @@ func sendReport(report []byte) {
 }
 
 /*Contact the known DB server for a list of IPs to run the experiment at*/
+/*
 func getIPS() (results.IPList, []string, int) {
 	conn, err := net.DialTimeout("tcp", config.DB_IP+":"+config.IP_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
 	if CheckError(err) {
@@ -520,6 +523,7 @@ func getIPS() (results.IPList, []string, int) {
 	return ip_list, ip_order, num_cycles
 
 }
+*/
 
 func getSendTimeLocalFile(localResultsStorage string) string { // if there is a localResults file, get the sendTime
 	bytes, err := ioutil.ReadFile(localResultsStorage)
@@ -530,6 +534,18 @@ func getSendTimeLocalFile(localResultsStorage string) string { // if there is a 
 	// decode the bytes
 	tempReport := results.DecodeCCResults(bytes)
 	return tempReport.SendTime
+}
+
+func parseAlg(line string) (string, string) {
+	sp := strings.Split(line, "/")
+	return sp[0], sp[1]
+}
+
+func parseAlgParams(line string) (string, []string) {
+	sp := strings.Split(line, " ")
+	alg := strings.ToLower(sp[0])
+	params := sp[1:]
+	return alg, params
 }
 
 func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int, total_experiments int, record bool) (string, int) {
@@ -571,8 +587,8 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 	// also check if the record flag is turned on
 	useTemp := (tempReport.ServerIP == IP && record)
 
-	for _, full_alg := range algs {
-		alg := strings.SplitN(full_alg, "-", 2)[1]
+	for _, alg_line := range algs {
+		_, alg := parseAlg(alg_line)
 		report.Throughput[alg] = make([]results.BytesTimeMap, num_cycles)
 		report.Delay[alg] = make([]results.TimeRTTMap, num_cycles)
 		report.FlowTimes[alg] = make([]results.OnOffMap, num_cycles)
@@ -583,10 +599,8 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 	cycle := 0
 	for cycle < num_cycles {
 		// loop through each algorithm
-		for _, alg := range algs {
-			algLineSplit := strings.Split(alg, "-")
-			proto := strings.ToLower(algLineSplit[0])
-			alg := strings.ToLower(strings.Join(algLineSplit[1:], "-"))
+		for _, alg_line := range algs {
+			proto, alg := parseAlg(alg_line)
 
 			// check if the result is in the report read at beginning of the function
 			if useTemp && (len(tempReport.Throughput[alg][cycle]) > 0) && (len(tempReport.Delay[alg][cycle]) > 0) && (len(tempReport.FlowTimes[alg][cycle]) > 0) {
@@ -651,7 +665,25 @@ func getURLFromServer(gg results.GraphInfo) string {
 	// now wait for the url
 	n, _ := conn.Read(recvBuf)
 	return string(recvBuf[:n])
+}
 
+type ServerList []map[string][]string
+type YAMLConfig struct {
+	Num_cycles int
+	Servers    ServerList
+}
+
+func ParseYAMLConfig(config_file string) (ServerList, int) {
+	config := YAMLConfig{}
+	data, err := ioutil.ReadFile(config_file)
+	if err != nil {
+		log.Fatal("Error reading config file: ", err)
+	}
+	err = yaml.Unmarshal(data, &config)
+	if err != nil {
+		log.Fatal("Error parsing config file: ", err)
+	}
+	return config.Servers, config.Num_cycles
 }
 
 var use_mm = flag.Bool("mm", false, "If true, connect to a local server from inside a mahimahi shell")
@@ -716,15 +748,15 @@ func main() {
 		}
 		runExperimentOnMachine(mahimahi, algs, num_cycles, 0, len(algs)*num_cycles, false)
 	} else { // contact DB for files
-		var ip_map map[string][]string
-		var ip_order []string
+		var servers ServerList
 		var num_cycles int
 		if *local_iplist != "" {
-			// TODO check if file exists, error if not
-			// TODO read file, error if bad format
-			ip_map, ip_order, num_cycles = results.GetIPList(*local_iplist)
+			if _, err := os.Stat(*local_iplist); os.IsNotExist(err) {
+				log.Fatal("Unable to find config file ", *local_iplist)
+			}
+			servers, num_cycles = ParseYAMLConfig(*local_iplist)
 		} else {
-			ip_map, ip_order, num_cycles = getIPS()
+			log.Fatal("Remote server list not yet supported. Please provide a local config file.")
 		}
 		if *cycles != 0 {
 			num_cycles = *cycles
@@ -735,37 +767,39 @@ func main() {
 		count := 1
 		total_experiments := 0
 		place := 0
-		for _, ip := range ip_order {
-			val := ip_map[ip]
-			total_experiments += len(val) * num_cycles
-			if stringInSlice(ip, finishedIPs) {
-				place += len(val) * num_cycles
-				count++
+		for _, d := range servers {
+			for ip, algs := range d {
+				total_experiments += len(algs) * num_cycles
+				if stringInSlice(ip, finishedIPs) {
+					place += len(algs) * num_cycles
+					count++
+				}
 			}
 		}
-		for _, ip := range ip_order {
-			val := ip_map[ip]
-			sendTime := "NONE"
-			new_place := 0
-			if stringInSlice(ip, finishedIPs) {
-				// file should be available to look for send time
+		for _, d := range servers {
+			for ip, algs := range d {
+				sendTime := "NONE"
+				new_place := 0
+				if stringInSlice(ip, finishedIPs) {
+					// file should be available to look for send time
+					localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, ip)
+					sendTime = getSendTimeLocalFile(localResultsStorage)
+					sendMap[ip] = sendTime
+					continue
+				}
+				log.WithFields(log.Fields{"ip": ip}).Info(fmt.Sprintf("Contacting Server %d/%d ", count, len(servers)))
+				sendTime, new_place = runExperimentOnMachine(ip, algs, num_cycles, place, total_experiments, *should_resume)
+				place = new_place
+				sendMap[ip] = sendTime
+				count++
+
+				// the file should also be available, look for sendTime there
 				localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, ip)
 				sendTime = getSendTimeLocalFile(localResultsStorage)
 				sendMap[ip] = sendTime
-				continue
+				fmt.Fprintf(progressWriter, "%s\n", ip)
+				progressWriter.Flush()
 			}
-			log.WithFields(log.Fields{"ip": ip}).Info(fmt.Sprintf("Contacting Server %d/%d ", count, len(ip_map)))
-			sendTime, new_place = runExperimentOnMachine(ip, val, num_cycles, place, total_experiments, *should_resume)
-			place = new_place
-			sendMap[ip] = sendTime
-			count++
-
-			// the file should also be available, look for sendTime there
-			localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, ip)
-			sendTime = getSendTimeLocalFile(localResultsStorage)
-			sendMap[ip] = sendTime
-			fmt.Fprintf(progressWriter, "%s\n", ip)
-			progressWriter.Flush()
 		}
 
 		// now ask the server for the link to the graph
@@ -782,11 +816,13 @@ func main() {
 			count++
 		}
 		// delete all the files
-		for IP := range ip_map {
-			localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, IP)
-			err := os.Remove(localResultsStorage)
-			if err != nil {
-				log.Info("Error removing local results storage: ", localResultsStorage)
+		for _, d := range servers {
+			for ip, _ := range d {
+				localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, ip)
+				err := os.Remove(localResultsStorage)
+				if err != nil {
+					log.Info("Error removing local results storage: ", localResultsStorage)
+				}
 			}
 		}
 		// delete progress files

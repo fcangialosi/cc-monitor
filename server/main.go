@@ -1,13 +1,9 @@
 package main
 
 import (
-	"../config"
-	"../results"
 	"bufio"
 	"bytes"
 	"fmt"
-	_ "github.com/go-sql-driver/mysql"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -18,6 +14,11 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"../config"
+	"../results"
+	_ "github.com/go-sql-driver/mysql"
+	log "github.com/sirupsen/logrus"
 )
 
 var sendBuf []byte = make([]byte, config.TCP_TRANSFER_SIZE)
@@ -313,9 +314,21 @@ func handleRequestTCP(conn *net.TCPConn) {
 		return
 	}
 
-	reqTime := string(reqBuf[:n])
-	req := strings.Split(reqTime, "->")[0]
-	curTime := strings.Split(reqTime, "->")[1]
+	reqTime := strings.SplitN(string(reqBuf[:n]), " ", 3)
+	curTime := reqTime[0]
+	alg := reqTime[1]
+	params := reqTime[2]
+	parsed_params := parseAlgParams(params)
+
+	on_time := time.Millisecond * config.MEAN_ON_TIME_MS
+	if manual_exp_time, ok := parsed_params["exp_time"]; ok {
+		new_on_time, err := time.ParseDuration(manual_exp_time)
+		if err != nil {
+			log.Warn("unable to parse experiment time from params: ", manual_exp_time)
+		} else {
+			on_time = new_on_time
+		}
+	}
 
 	file, err := conn.File()
 	if err != nil {
@@ -323,19 +336,48 @@ func handleRequestTCP(conn *net.TCPConn) {
 	}
 
 	var ccname string
-	if req[:3] == "ccp" {
+	// Start CCP process in the background
+	if alg[:3] == "ccp" {
 		ccname = "ccp"
-		// sp := strings.Split(req, "-")
-		// ccp_alg := sp[1]
-		// TODO assuming nimbus for now
-		// ccp_params := strings.Split(sp[2], ",")
-		// TODO need to pass these params to ccp
+		args := []string{
+			config.PATH_TO_CCP,
+			"--datapath=kernel",
+			"--congAlg=" + alg[3:],
+		}
+		logname := fmt.Sprintf("%s_%s.log", alg, strings.Replace(params, " ", "_", -1))
+		args_string := "\"" + strings.Join(args, " ") + params + logname + "\""
+		cmd := exec.Command("/bin/bash", "-c", args_string)
+		if err := cmd.Start(); err != nil {
+			log.Error("error starting ccpl")
+			log.Error(err)
+		}
+
+		defer func() {
+			if err := cmd.Process.Kill(); err != nil {
+				log.Warn("error stopping ccpl")
+			}
+			// Copy logfile to database
+			remotepath := config.DB_SERVER_CCP_TMP + conn.LocalAddr().String() + "-" + conn.RemoteAddr().String() + "/"
+			mkdir := exec.Command("ssh", "-i", config.PATH_TO_PRIV_KEY, "mkdir", "-p", remotepath)
+			if err := mkdir.Run(); err != nil {
+				log.Error("error creating directory on db server")
+				log.Error(err)
+			}
+			scp := exec.Command("scp", "-i", config.PATH_TO_PRIV_KEY, logname, config.DB_SERVER+":"+remotepath)
+			if err := scp.Run(); err != nil {
+				log.Error("error sending ccp log to db server")
+				log.Error(err)
+			}
+		}()
+
+		// Give ccpl some time to startup
+		time.Sleep(1 * time.Second)
+
 	} else {
-		ccname = req
+		ccname = alg
 	}
 	syscall.SetsockoptString(int(file.Fd()), syscall.IPPROTO_TCP, config.TCP_CONGESTION, ccname)
 
-	on_time := time.Millisecond * config.MEAN_ON_TIME_MS
 	conn.Write(startBuf)
 	buf := make([]byte, config.ACK_LEN)
 	conn.Read(buf) // wait for ack back
@@ -371,6 +413,16 @@ sendloop:
 	if err != nil {
 		log.Warn(err)
 	}
+
+	return
+}
+
+func parseAlgParams(line string) (params map[string]string) {
+	sp := strings.Split(line, " ")
+	for _, param := range sp {
+		kv := strings.Split(param, "=")
+		params[kv[0]] = kv[1]
+	}
 	return
 }
 
@@ -401,6 +453,7 @@ func runGCC(srcport string, ip string, alg string) (float64, results.TimeRTTMap)
 		linkRatePPS := linkRateMbps * 125000 / config.PING_SIZE_BYTES
 		linkRate = strconv.Itoa(linkRatePPS)
 	}
+
 	// Now we can start genericCC
 	// set MIN_RTT env variable
 	os.Setenv("MIN_RTT", "150")
