@@ -1,5 +1,5 @@
 # Global Paramaters
-num_cycles: 3
+num_cycles: 1
 exp_time: 30s # accepts int number of (s)econds or (m)inutes
 
 # Default algorithms to use for each server if not specified 
