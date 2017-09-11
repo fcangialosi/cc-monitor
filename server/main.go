@@ -172,6 +172,9 @@ func handleSRTTRequest(conn *net.TCPConn) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		brokenLine := strings.Split(line, " ")
+		if len(brokenLine) < 10 {
+			continue
+		}
 		if !(strings.Contains(line, "ffff")) { // to be able to parse for mahimahi correctly
 			continue
 		}
