@@ -267,7 +267,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 			}
 			log.Info("Proc killed")
 			// Copy logfile to database
-			remotepath := config.DB_SERVER_CCP_TMP + conn.LocalAddr().String() + "-" + conn.RemoteAddr().String() + "/"
+			remotepath := config.DB_SERVER_CCP_TMP + strings.Split(conn.LocalAddr().String(), ":")[0] + "-" + strings.Split(conn.RemoteAddr().String(), ":")[0] + "/"
 			log.WithFields(log.Fields{"remotepath": remotepath}).Info("Copying to db")
 
 			shellCommand(fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=no %s mkdir -p %s", config.PATH_TO_PRIV_KEY, config.DB_SERVER, remotepath), true)
