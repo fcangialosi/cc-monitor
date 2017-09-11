@@ -2,10 +2,7 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"os"
@@ -24,47 +21,6 @@ import (
 var sendBuf []byte = make([]byte, config.TCP_TRANSFER_SIZE)
 var rng *rand.Rand
 
-/*****************************************************************************/
-/*Taken from a stack overflow post for exec'ing commands in go with pipes*/
-func Execute(output_buffer *bytes.Buffer, stack ...*exec.Cmd) (err error) {
-	var error_buffer bytes.Buffer
-	pipe_stack := make([]*io.PipeWriter, len(stack)-1)
-	i := 0
-	for ; i < len(stack)-1; i++ {
-		stdin_pipe, stdout_pipe := io.Pipe()
-		stack[i].Stdout = stdout_pipe
-		stack[i].Stderr = &error_buffer
-		stack[i+1].Stdin = stdin_pipe
-		pipe_stack[i] = stdout_pipe
-	}
-	stack[i].Stdout = output_buffer
-	stack[i].Stderr = &error_buffer
-
-	if err := call(stack, pipe_stack); err != nil {
-		log.Fatalln(string(error_buffer.Bytes()), err)
-	}
-	return err
-}
-
-func call(stack []*exec.Cmd, pipes []*io.PipeWriter) (err error) {
-	if stack[0].Process == nil {
-		if err = stack[0].Start(); err != nil {
-			return err
-		}
-	}
-	if len(stack) > 1 {
-		if err = stack[1].Start(); err != nil {
-			return err
-		}
-		defer func() {
-			if err == nil {
-				pipes[0].Close()
-				err = call(stack[1:], pipes[1:])
-			}
-		}()
-	}
-	return stack[0].Wait()
-}
 func init() {
 	rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 }
@@ -342,12 +298,22 @@ func handleRequestTCP(conn *net.TCPConn) {
 	buf := make([]byte, config.ACK_LEN)
 	conn.Read(buf) // wait for ack back
 	log.Info("Connection established, starting sendloop")
+
+	// NOTE: for mahimahi, grepping for client port will result in lines both from server -> NAT and NAT -> client
+	// we would want NAT -> client lines -> so hack, just check for "ffff"
+	parseString := clientPort
+	probeLog := fmt.Sprintf("%s_%s_tcpprobe.log", clientIP, curTime)
+	probe := exec.Command("bin/bash/", "-c", fmt.Sprintf("\"cat /proc/net/tcpprobe | grep %s > %s\"", parseString, probeLog))
+	if err := probe.Run(); err != nil {
+		log.WithFields(log.Fields{"err": err}).Fatal("Error collecting from tcpprobe")
+	}
+
 	on_timer := time.After(on_time)
 sendloop:
 	for {
 		select {
 		case <-on_timer:
-			log.Info("closing?")
+			log.Info("Finished")
 			break sendloop
 		default:
 			//log.Warn("Waiting to write to TCP connection")
@@ -355,25 +321,6 @@ sendloop:
 		}
 	}
 	log.Info("Done. Closing connection...")
-	// now run grep command to get all the SRTT estimates and output it to a file
-	//curTime := currentTime()
-	parseString := clientPort
-	// NOTE: for mahimahi, grepping for client port will result in lines both from server -> NAT and NAT -> client
-	// we would want NAT -> client lines -> so hack, just check for "ffff"
-	var b bytes.Buffer
-	// TODO rewrite this using /bin/sh | >
-	if err := Execute(&b,
-		exec.Command("/bin/cat", config.SERVER_TCPPROBE_OUTPUT),
-		exec.Command("/bin/grep", parseString),
-	); err != nil {
-		log.Fatal(err)
-	}
-	tcpprobeInfo := fmt.Sprintf("%s_%s_tcpprobe.log", clientIP, curTime)
-	err = ioutil.WriteFile(tcpprobeInfo, b.Bytes(), 0644)
-
-	if err != nil {
-		log.Warn(err)
-	}
 
 	return
 }
@@ -491,6 +438,18 @@ func runGCC(srcport string, ip string, alg string) (float64, results.TimeRTTMap)
 
 func main() {
 	quit := make(chan struct{})
+
+	log.Info("Preparing TCP Probe")
+	// sudo modprobe tcp_probe port=10102 full=1
+	// sudo chmod 444 /proc/net/tcpprobe
+	modprobe := exec.Command("/bin/sh", "modprobe", "tcp_probe", "port="+config.MEASURE_SERVER_PORT, "full=1")
+	chmod := exec.Command("/bin/sh", "chmod", "444", "/proc/net/tcpprobe")
+	if err := modprobe.Run(); err != nil {
+		log.WithFields(log.Fields{"err": err}).Fatal("Error loading tcpprobe module")
+	}
+	if err := chmod.Run(); err != nil {
+		log.WithFields(log.Fields{"err": err}).Fatal("Error setting permissions of tcpprobe log")
+	}
 
 	go measureServerTCP() // Measure TCP throughput
 	go measureServerUDP() // open port to measure UDP throughput
