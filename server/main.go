@@ -299,7 +299,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 	// we would want NAT -> client lines -> so hack, just check for "ffff"
 	parseString := clientPort
 	probeLog := fmt.Sprintf("%s_%s_tcpprobe.log", clientIP, curTime)
-	probe := shellCommand(fmt.Sprintf("\"cat /proc/net/tcpprobe | grep %s > %s\"", parseString, probeLog), false)
+	probe := shellCommand(fmt.Sprintf("cat /proc/net/tcpprobe | grep %s > %s", parseString, probeLog), false)
 
 	on_timer := time.After(on_time)
 sendloop:
