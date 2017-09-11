@@ -145,7 +145,7 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 				log.WithFields(log.Fields{"err": err, "path": path}).Panic("Creating path to store results")
 			}
 
-			shellCommand(fmt.Sprintf("mv %s%s-%s/* %s", config.DB_SERVER_CCP_TMP, server_ip, client_ip, path), true)
+			shellCommand(fmt.Sprintf("mv %s%s-%s/* %s/%s", config.DB_SERVER_CCP_TMP, server_ip, client_ip, path, current_time), true)
 
 			full_path := path + "/" + filename
 			f, err := os.Create(full_path)
@@ -179,6 +179,7 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 			// now make the throughput graph for each of the algorithms
 			for alg, _ := range rep.Throughput {
 				log.Info("Alg is ", alg)
+				alg = strings.Split(alg, " ")[0]
 				// log for graphing script
 				title := fmt.Sprintf("%s_Throughput", alg)
 				thr_log := fmt.Sprintf("%s_%s", alg, graph_location)
