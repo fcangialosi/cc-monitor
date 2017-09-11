@@ -244,7 +244,9 @@ func handleRequestTCP(conn *net.TCPConn) {
 	clientIPPort := conn.RemoteAddr().String()
 	clientIP := strings.Split(clientIPPort, ":")[0]
 	clientPort := strings.Split(clientIPPort, ":")[1]
-	log.Info("Client port is: ", clientIPPort)
+
+	log.WithFields(log.Fields{"client": clientIPPort}).Info("New measurement requested")
+
 	startBuf := []byte("START_FLOW")
 	reqBuf := make([]byte, config.MAX_REQ_SIZE)
 	n, err := conn.Read(reqBuf)
@@ -256,11 +258,15 @@ func handleRequestTCP(conn *net.TCPConn) {
 		return
 	}
 
+	log.WithFields(log.Fields{"req": reqBuf}).Info("Read from client")
+
 	reqTime := strings.SplitN(string(reqBuf[:n]), " ", 3)
 	curTime := reqTime[0]
 	alg := reqTime[1]
 	params := reqTime[2]
 	parsed_params := parseAlgParams(params)
+
+	log.WithFields(log.Fields{"curTime": curTime, "alg": alg, "params": params, "parsed_params": parsed_params}).Info("Parsed client req")
 
 	on_time := time.Millisecond * config.MEAN_ON_TIME_MS
 	if manual_exp_time, ok := parsed_params["exp_time"]; ok {
@@ -271,6 +277,8 @@ func handleRequestTCP(conn *net.TCPConn) {
 			on_time = new_on_time
 		}
 	}
+
+	log.WithFields(log.Fields{"on_time": on_time}).Info("Starting experiment")
 
 	file, err := conn.File()
 	if err != nil {
@@ -288,18 +296,23 @@ func handleRequestTCP(conn *net.TCPConn) {
 		}
 		logname := fmt.Sprintf("%s_%s.log", alg, strings.Replace(params, " ", "_", -1))
 		args_string := "\"" + strings.Join(args, " ") + params + logname + "\""
+		log.WithFields(log.Fields{"args": args, "logname": logname, "args_string": args_string}).Info("exec")
 		cmd := exec.Command("/bin/bash", "-c", args_string)
 		if err := cmd.Start(); err != nil {
 			log.Error("error starting ccpl")
 			log.Error(err)
 		}
+		log.Info("Command started.")
 
 		defer func() {
+			log.Info("Running from defer")
 			if err := cmd.Process.Kill(); err != nil {
 				log.Warn("error stopping ccpl")
 			}
+			log.Info("Proc killed")
 			// Copy logfile to database
 			remotepath := config.DB_SERVER_CCP_TMP + conn.LocalAddr().String() + "-" + conn.RemoteAddr().String() + "/"
+			log.WithFields(log.Fields{"remotepath": remotepath}).Info("Copying to db")
 			mkdir := exec.Command("ssh", "-i", config.PATH_TO_PRIV_KEY, "mkdir", "-p", remotepath)
 			if err := mkdir.Run(); err != nil {
 				log.Error("error creating directory on db server")
@@ -310,16 +323,21 @@ func handleRequestTCP(conn *net.TCPConn) {
 				log.Error("error sending ccp log to db server")
 				log.Error(err)
 			}
+			log.WithFields(log.Fields{"mkdir": mkdir, "scp": scp}).Info("Done defer")
 		}()
 
 		// Give ccpl some time to startup
 		time.Sleep(1 * time.Second)
 
+		log.Info("Done waiting for CCPL")
+
 	} else {
 		ccname = alg
 	}
+	log.Info("setting sockopt to ", ccname)
 	syscall.SetsockoptString(int(file.Fd()), syscall.IPPROTO_TCP, config.TCP_CONGESTION, ccname)
 
+	log.Info("sending ack")
 	conn.Write(startBuf)
 	buf := make([]byte, config.ACK_LEN)
 	conn.Read(buf) // wait for ack back
@@ -343,6 +361,7 @@ sendloop:
 	// NOTE: for mahimahi, grepping for client port will result in lines both from server -> NAT and NAT -> client
 	// we would want NAT -> client lines -> so hack, just check for "ffff"
 	var b bytes.Buffer
+	// TODO rewrite this using /bin/sh | >
 	if err := Execute(&b,
 		exec.Command("/bin/cat", config.SERVER_TCPPROBE_OUTPUT),
 		exec.Command("/bin/grep", parseString),
