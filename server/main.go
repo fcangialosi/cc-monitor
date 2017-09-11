@@ -14,7 +14,6 @@ import (
 
 	"../config"
 	"../results"
-	_ "github.com/go-sql-driver/mysql"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -245,15 +244,20 @@ func handleRequestTCP(conn *net.TCPConn) {
 	// Start CCP process in the background
 	if alg[:3] == "ccp" {
 		ccname = "ccp"
+		logname := fmt.Sprintf("%s_%s.log", alg, strings.Replace(params, " ", "_", -1))
 		args := []string{
 			config.PATH_TO_CCP,
 			"--datapath=kernel",
 			"--congAlg=" + alg[4:],
+			"--logfile=" + logname,
 		}
-		logname := fmt.Sprintf("%s_%s.log", alg, strings.Replace(params, " ", "_", -1))
-		args_string := strings.Join(args, " ") + " " + params + " > " + logname
+		args_string := strings.Join(args, " ") + " " + params
 		log.WithFields(log.Fields{"args": args, "logname": logname, "args_string": args_string}).Info("exec")
-		cmd := shellCommand(args_string, false)
+		// cmd := shellCommand(args_string, false)
+		cmd := exec.Command("sudo", strings.Split(args_string, " ")...)
+		if err := cmd.Start(); err != nil {
+			log.WithFields(log.Fields{"err": err, "cmd": cmd}).Error("Error starting ccpl")
+		}
 		log.Info("Command started.")
 
 		defer func() {
