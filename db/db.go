@@ -145,8 +145,6 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 				log.WithFields(log.Fields{"err": err, "path": path}).Panic("Creating path to store results")
 			}
 
-			shellCommand(fmt.Sprintf("mv %s%s-%s/* %s/%s", config.DB_SERVER_CCP_TMP, server_ip, client_ip, path, current_time), true)
-
 			full_path := path + "/" + filename
 			f, err := os.Create(full_path)
 			checkErrMsg(err, "creating file for path "+full_path)
@@ -167,6 +165,8 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 			if err != nil {
 				log.WithFields(log.Fields{"err": err, "path": path}).Panic("Creating graph path to store results")
 			}
+
+			shellCommand(fmt.Sprintf("mv %s%s-%s/* %s/%s/", config.DB_SERVER_CCP_TMP, server_ip, client_ip, path, current_time), true)
 
 			args := []string{full_path, graph_location, graph_title, graph_directory}
 			cmd := exec.Command(config.PATH_TO_GRAPH_SCRIPT, args...) // graphing scripts  moves the image to file with the python web server running
