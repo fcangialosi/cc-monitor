@@ -266,7 +266,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 			remotepath := config.DB_SERVER_CCP_TMP + conn.LocalAddr().String() + "-" + conn.RemoteAddr().String() + "/"
 			log.WithFields(log.Fields{"remotepath": remotepath}).Info("Copying to db")
 
-			shellCommand(fmt.Sprintf("ssh -i %s mkdir -p %s", config.PATH_TO_PRIV_KEY, remotepath), true)
+			shellCommand(fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=no %s mkdir -p %s", config.PATH_TO_PRIV_KEY, config.DB_SERVER, remotepath), true)
 			shellCommand(fmt.Sprintf("scp -i %s %s %s:%s", config.PATH_TO_PRIV_KEY, logname, config.DB_SERVER, remotepath), true)
 
 			log.Info("done defer")
