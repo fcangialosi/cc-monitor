@@ -248,10 +248,10 @@ func handleRequestTCP(conn *net.TCPConn) {
 		args := []string{
 			config.PATH_TO_CCP,
 			"--datapath=kernel",
-			"--congAlg=" + alg[3:],
+			"--congAlg=" + alg[4:],
 		}
 		logname := fmt.Sprintf("%s_%s.log", alg, strings.Replace(params, " ", "_", -1))
-		args_string := strings.Join(args, " ") + params + " > " + logname
+		args_string := strings.Join(args, " ") + " " + params + " > " + logname
 		log.WithFields(log.Fields{"args": args, "logname": logname, "args_string": args_string}).Info("exec")
 		cmd := shellCommand(args_string, false)
 		log.Info("Command started.")
