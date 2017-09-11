@@ -11,7 +11,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"gopkg.in/yaml.v2"
@@ -50,7 +49,7 @@ func measureThroughput(start time.Time, bytes_received uint32, m results.BytesTi
 }
 
 /*Record TCP throughput*/
-func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time, num_cycles int, cycle int) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool) {
+func measureTCP(server_ip string, alg string, num_cycles int, cycle int) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool) {
 	flow_throughputs := results.BytesTimeMap{}
 	flow_times := results.OnOffMap{}
 	delay := results.TimeRTTMap{}
@@ -168,7 +167,7 @@ func measureTCP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 
 }
 
-func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time, num_cycles int, cycle int) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool) {
+func measureUDP(server_ip string, alg string, num_cycles int, cycle int) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool) {
 	timed_out := false
 	flow_throughputs := results.BytesTimeMap{}
 	flow_times := results.OnOffMap{}
@@ -340,134 +339,13 @@ func measureUDP2(server_ip string, alg string, start_ch chan time.Time, end_ch c
 	return flow_throughputs, flow_times, timeRTTMap, timed_out
 }
 
-/*Starts a ping chain - stops when the other goroutine sends a message over a channel*/
-func sendPings(server_ip string, start_ch chan time.Time, end_ch chan time.Time, protocol string, port string) results.TimeRTTMap {
-
-	rtt_dict := results.TimeRTTMap{}
-	start := <-start_ch
-
-	// if protocol is UDP -> use separate connections in goroutine
-	if protocol == "udp" {
-		var mutex = &sync.Mutex{}
-	udpSendloop:
-		for {
-			select {
-			case <-end_ch:
-				break udpSendloop
-			default:
-				go func(m results.TimeRTTMap) {
-					conn, err := net.DialTimeout(protocol, server_ip+":"+port, config.CONNECT_TIMEOUT*time.Second)
-					if err != nil {
-						log.Warn("Non nill error on writing udp pings: ", err)
-						return
-					}
-					defer conn.Close()
-
-					sendTimestamp := elapsed(start)
-					conn.Write([]byte(config.ACK))
-					recvBuf := make([]byte, config.PING_SIZE_BYTES)
-					_, err = conn.Read(recvBuf)
-					recvTimestamp := elapsed(start)
-					if err != nil {
-						log.Warn("Non nil error on udp pings: ", err)
-						return
-					}
-
-					rtt := recvTimestamp - sendTimestamp
-					mutex.Lock()
-					m[sendTimestamp] = rtt
-					mutex.Unlock()
-
-				}(rtt_dict)
-
-			}
-			time.Sleep(time.Millisecond * 500)
-		}
-
-		mutex.Lock()
-		avg_delay := float32(0)
-		for _, rtt := range rtt_dict {
-			avg_delay += rtt
-		}
-		avg_delay /= float32(len(rtt_dict))
-		mutex.Unlock()
-		log.WithFields(log.Fields{"avg_delay_ms": avg_delay}).Info()
-		return rtt_dict
-	}
-
-	// protocol is TCP
-
-	conn, err := net.DialTimeout(protocol, server_ip+":"+port, config.CONNECT_TIMEOUT*time.Second)
-	if CheckError(err) {
-		log.Warn("Error creating connection for pings", err)
-		<-end_ch
-		return rtt_dict
-	}
-	defer conn.Close()
-
-	i := 0
-sendloop:
-	for {
-		recvBuf := make([]byte, config.PING_SIZE_BYTES)
-		send_timestamp := elapsed(start)
-		conn.Write([]byte(strconv.Itoa(i)))
-	recvloop:
-		for {
-			select {
-			case <-end_ch:
-				break sendloop
-			default:
-				conn.SetReadDeadline(time.Now().Add(1 * time.Second))
-				n, err := conn.Read(recvBuf)
-				recv_timestamp := elapsed(start)
-				if err != nil || n <= 0 {
-					if err, ok := err.(net.Error); ok && !err.Timeout() {
-						log.Warn("error reading pings", err)
-					}
-					continue
-				}
-				rtt := (recv_timestamp - send_timestamp)
-				rtt_dict[send_timestamp] = rtt
-				break recvloop
-			}
-		}
-	}
-
-	avg_delay := float32(0)
-	for _, rtt := range rtt_dict {
-		avg_delay += rtt
-	}
-	avg_delay /= float32(len(rtt_dict))
-	log.WithFields(log.Fields{"avg_delay_ms": avg_delay}).Info()
-	return rtt_dict
-
-}
-
-func runExperiment(f func(server_ip string, alg string, start_ch chan time.Time, end_ch chan time.Time, num_cycles int, cycle int) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool), IP string, alg string, report *results.CCResults, protocol string, port string, num_cycles int, cycle int) bool {
-	var wg sync.WaitGroup
-	start_ping := make(chan time.Time)
-	end_ping := make(chan time.Time)
+func runExperiment(f func(server_ip string, alg string, num_cycles int, cycle int) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool), IP string, alg string, report *results.CCResults, protocol string, port string, num_cycles int, cycle int) bool {
 	throughput := make(results.BytesTimeMap)
 	flow_times := make(results.OnOffMap)
-	ping_results := make(results.TimeRTTMap)
 	time_map := make(results.TimeRTTMap)
 	timed_out := false
 
-	wg.Add(1)
-	go func(wg *sync.WaitGroup) {
-		defer wg.Done()
-		throughput, flow_times, time_map, timed_out = f(IP, alg, start_ping, end_ping, num_cycles, cycle)
-	}(&wg)
-
-	if protocol != config.UDP && protocol != config.TCP { // only use separate pinging for TCP now
-		wg.Add(1)
-		go func(wg *sync.WaitGroup) {
-			defer wg.Done()
-			ping_results = sendPings(IP, start_ping, end_ping, protocol, port)
-		}(&wg)
-
-	}
-	wg.Wait()
+	throughput, flow_times, time_map, timed_out = f(IP, alg, num_cycles, cycle)
 
 	if !timed_out {
 		report.Throughput[alg][cycle] = throughput
@@ -615,9 +493,9 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 			}
 
 			if proto == "tcp" {
-				runExperiment(measureTCP2, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, 1, cycle)
+				runExperiment(measureTCP, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, 1, cycle)
 			} else if proto == "udp" {
-				runExperiment(measureUDP2, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, 1, cycle)
+				runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, 1, cycle)
 			} else {
 				log.Error("Unknown protocol!")
 			}

@@ -76,7 +76,7 @@ func checkErrMsg(err error, message string) {
 }
 
 /*Handles the "open genericCC protocol" -> over TCP*/
-func openUDPServer() {
+func measureServerUDP() {
 	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.OPEN_UDP_PORT)
 	checkErrMsg(err, "open TCP port for starting genericCC")
 
@@ -129,64 +129,6 @@ func openUDPServer() {
 	}
 }
 
-func pingServerTCP() {
-	p := []byte("ACK")
-	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.PING_TCP_SERVER_PORT)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	server, err := net.ListenTCP("tcp", laddr)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for {
-		conn, err := server.AcceptTCP()
-		if err != nil {
-			log.Warning(err)
-		}
-		go func(c *net.TCPConn, buf []byte) {
-			defer c.Close()
-			// loop of reading and writing until eof
-			recv := make([]byte, config.PING_SIZE_BYTES)
-			for {
-				n, err := c.Read(recv)
-				if err == io.EOF {
-					return // client disconnected
-				}
-				//log.WithFields(log.Fields{"i": string(recv[:n])}).Info("got ping")
-				c.Write(recv[:n])
-			}
-		}(conn, p)
-	}
-}
-
-func pingServerUDP() {
-	p := make([]byte, config.PING_SIZE_BYTES)
-
-	laddr, err := net.ResolveUDPAddr("udp", ":"+config.PING_UDP_SERVER_PORT)
-	if err != nil {
-		log.Fatal(err)
-	}
-	server, err := net.ListenUDP("udp", laddr)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for {
-		//log.Warn("reading from ping server")
-		_, raddr, err := server.ReadFromUDP(p)
-		if err != nil {
-			log.Fatal(err)
-		}
-		go func(s *net.UDPConn, addr *net.UDPAddr, buf []byte) {
-			//log.WithFields(log.Fields{"IP": addr.IP, "Port": addr.Port}).Info("Writing back ping channel")
-			s.WriteToUDP(buf, addr)
-		}(server, raddr, p)
-	}
-
-}
 func currentTime() string {
 	hour, min, sec := time.Now().Clock()
 	return fmt.Sprintf("%d.%d.%d", hour, min, sec)
@@ -531,10 +473,8 @@ func runGCC(srcport string, ip string, alg string) (float64, results.TimeRTTMap)
 func main() {
 	quit := make(chan struct{})
 
-	go pingServerUDP()    // UDP pings
-	go pingServerTCP()    // TCP pings
 	go measureServerTCP() // Measure TCP throughput
-	go openUDPServer()    // open port to measure UDP throughput
+	go measureServerUDP() // open port to measure UDP throughput
 	go srttInfoServer()   // read the tcp probe output files, parse srtt array, and delete logfiles
 
 	<-quit
