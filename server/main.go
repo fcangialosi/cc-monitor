@@ -265,17 +265,12 @@ func handleRequestTCP(conn *net.TCPConn) {
 			// Copy logfile to database
 			remotepath := config.DB_SERVER_CCP_TMP + conn.LocalAddr().String() + "-" + conn.RemoteAddr().String() + "/"
 			log.WithFields(log.Fields{"remotepath": remotepath}).Info("Copying to db")
-			mkdir := exec.Command("ssh", "-i", config.PATH_TO_PRIV_KEY, "mkdir", "-p", remotepath)
-			if err := mkdir.Run(); err != nil {
-				log.Error("error creating directory on db server")
-				log.Error(err)
-			}
-			scp := exec.Command("scp", "-i", config.PATH_TO_PRIV_KEY, logname, config.DB_SERVER+":"+remotepath)
-			if err := scp.Run(); err != nil {
-				log.Error("error sending ccp log to db server")
-				log.Error(err)
-			}
-			log.WithFields(log.Fields{"mkdir": mkdir, "scp": scp}).Info("Done defer")
+
+			shellCommand(fmt.Sprintf("ssh -i %s mkdir -p %s", config.PATH_TO_PRIV_KEY, remotepath), true)
+			shellCommand(fmt.Sprintf("scp -i %s %s %s:%s", config.PATH_TO_PRIV_KEY, logname, config.DB_SERVER, remotepath), true)
+
+			log.Info("done defer")
+
 		}()
 
 		// Give ccpl some time to startup
