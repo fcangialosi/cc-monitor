@@ -253,11 +253,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 		logname := fmt.Sprintf("%s_%s.log", alg, strings.Replace(params, " ", "_", -1))
 		args_string := "\"" + strings.Join(args, " ") + params + logname + "\""
 		log.WithFields(log.Fields{"args": args, "logname": logname, "args_string": args_string}).Info("exec")
-		cmd := exec.Command("/bin/bash", "-c", args_string)
-		if err := cmd.Start(); err != nil {
-			log.Error("error starting ccpl")
-			log.Error(err)
-		}
+		cmd := shellCommand(args_string, false)
 		log.Info("Command started.")
 
 		defer func() {
@@ -303,10 +299,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 	// we would want NAT -> client lines -> so hack, just check for "ffff"
 	parseString := clientPort
 	probeLog := fmt.Sprintf("%s_%s_tcpprobe.log", clientIP, curTime)
-	probe := exec.Command("bin/bash/", "-c", fmt.Sprintf("\"cat /proc/net/tcpprobe | grep %s > %s\"", parseString, probeLog))
-	if err := probe.Run(); err != nil {
-		log.WithFields(log.Fields{"err": err}).Fatal("Error collecting from tcpprobe")
-	}
+	probe := shellCommand(fmt.Sprintf("\"cat /proc/net/tcpprobe | grep %s > %s\"", parseString, probeLog), false)
 
 	on_timer := time.After(on_time)
 sendloop:
@@ -321,6 +314,10 @@ sendloop:
 		}
 	}
 	log.Info("Done. Closing connection...")
+	if err := probe.Process.Kill(); err != nil {
+		log.Warn("error stopping probe")
+	}
+	log.Info("Probe killed")
 
 	return
 }
@@ -436,20 +433,26 @@ func runGCC(srcport string, ip string, alg string) (float64, results.TimeRTTMap)
 	return lossRate, results.TimeRTTMap{}
 }
 
+func shellCommand(cmd string, wait bool) *exec.Cmd {
+	proc := exec.Command("/bin/bash", "-c", "\""+cmd+"\"")
+	if wait {
+		if err := proc.Run(); err != nil {
+			log.WithFields(log.Fields{"err": err, "cmd": cmd}).Error("Error running shell command")
+		}
+	} else {
+		if err := proc.Start(); err != nil {
+			log.WithFields(log.Fields{"err": err, "cmd": cmd}).Error("Error starting shell command")
+		}
+	}
+	return proc
+}
+
 func main() {
 	quit := make(chan struct{})
 
 	log.Info("Preparing TCP Probe")
-	// sudo modprobe tcp_probe port=10102 full=1
-	// sudo chmod 444 /proc/net/tcpprobe
-	modprobe := exec.Command("/bin/sh", "modprobe", "tcp_probe", "port="+config.MEASURE_SERVER_PORT, "full=1")
-	chmod := exec.Command("/bin/sh", "chmod", "444", "/proc/net/tcpprobe")
-	if err := modprobe.Run(); err != nil {
-		log.WithFields(log.Fields{"err": err}).Fatal("Error loading tcpprobe module")
-	}
-	if err := chmod.Run(); err != nil {
-		log.WithFields(log.Fields{"err": err}).Fatal("Error setting permissions of tcpprobe log")
-	}
+	shellCommand("sudo modprobe tcp_probe port="+config.MEASURE_SERVER_PORT+" full=1", true)
+	shellCommand("sudo chmod 444 /proc/net/tcpprobe", true)
 
 	go measureServerTCP() // Measure TCP throughput
 	go measureServerUDP() // open port to measure UDP throughput
