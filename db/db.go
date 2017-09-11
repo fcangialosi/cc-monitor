@@ -15,6 +15,20 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+func shellCommand(cmd string, wait bool) *exec.Cmd {
+	proc := exec.Command("/bin/bash", "-c", cmd)
+	if wait {
+		if err := proc.Run(); err != nil {
+			log.WithFields(log.Fields{"err": err, "cmd": cmd}).Error("Error running shell command")
+		}
+	} else {
+		if err := proc.Start(); err != nil {
+			log.WithFields(log.Fields{"err": err, "cmd": cmd}).Error("Error starting shell command")
+		}
+	}
+	return proc
+}
+
 func getIPLocation(ip_file string, input_ip string) string {
 	file, err := os.Open(ip_file)
 	defer file.Close()
@@ -131,12 +145,7 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 				log.WithFields(log.Fields{"err": err, "path": path}).Panic("Creating path to store results")
 			}
 
-			args_string := fmt.Sprintf("\"mv %s/%s-%s/* %s\"", config.DB_SERVER_CCP_TMP, client_ip, server_ip, path)
-			mv := exec.Command("/bin/bash", "-c", args_string)
-			if err := mv.Run(); err != nil {
-				log.Error("error moving ccp logs")
-				log.Error(err)
-			}
+			shellCommand(fmt.Sprintf("mv %s/%s-%s/* %s", config.DB_SERVER_CCP_TMP, client_ip, server_ip, path), true)
 
 			full_path := path + "/" + filename
 			f, err := os.Create(full_path)
