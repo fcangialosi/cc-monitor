@@ -214,7 +214,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 		return
 	}
 
-	log.WithFields(log.Fields{"req": reqBuf}).Info("Read from client")
+	log.WithFields(log.Fields{"req": string(reqBuf)}).Info("Read from client")
 
 	reqTime := strings.SplitN(string(reqBuf[:n]), " ", 3)
 	curTime := reqTime[0]
@@ -323,6 +323,7 @@ sendloop:
 }
 
 func parseAlgParams(line string) (params map[string]string) {
+	params = make(map[string]string)
 	sp := strings.Split(line, " ")
 	for _, param := range sp {
 		kv := strings.Split(param, "=")
@@ -434,7 +435,7 @@ func runGCC(srcport string, ip string, alg string) (float64, results.TimeRTTMap)
 }
 
 func shellCommand(cmd string, wait bool) *exec.Cmd {
-	proc := exec.Command("/bin/bash", "-c", "\""+cmd+"\"")
+	proc := exec.Command("/bin/bash", "-c", cmd)
 	if wait {
 		if err := proc.Run(); err != nil {
 			log.WithFields(log.Fields{"err": err, "cmd": cmd}).Error("Error running shell command")
