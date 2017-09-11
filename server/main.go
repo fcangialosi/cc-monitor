@@ -457,10 +457,11 @@ func main() {
 	shellCommand("sudo modprobe tcp_probe port="+config.MEASURE_SERVER_PORT+" full=1", true)
 	shellCommand("sudo chmod 444 /proc/net/tcpprobe", true)
 
-	my_public_ip, err := ipify.GetIp()
+	public_ip, err := ipify.GetIp()
 	if err != nil {
 		log.Error("error finding public IP: ", err)
 	}
+	my_public_ip = public_ip
 	log.Info("Found my public IP")
 	log.Info(my_public_ip)
 
