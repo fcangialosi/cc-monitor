@@ -555,10 +555,12 @@ func ParseYAMLConfig(config_file string) (ServerList, int) {
 	config := YAMLConfig{}
 	data, err := ioutil.ReadFile(config_file)
 	if err != nil {
+		log.Warn("Hint: make sure you're only using spaces, not tabs!")
 		log.Fatal("Error reading config file: ", err)
 	}
 	err = yaml.Unmarshal(data, &config)
 	if err != nil {
+		log.Warn("Hint: make sure you're only using spaces, not tabs!")
 		log.Fatal("Error parsing config file: ", err)
 	}
 	return config.Servers, config.Num_cycles

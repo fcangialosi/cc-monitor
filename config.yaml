@@ -11,8 +11,8 @@ default: &default
 # (exp_time can be provided as a key to override global)
 
 servers:
-  - 54.215.210.136:
-		- tcp/ccp-nimbus useSwitching=false bwEstMode=true
+  - 13.56.224.25:
+    - tcp/ccp-nimbus useSwitching=false bwEstMode=true exp_time=35s
 
 # Available algorithms and parameters
 # 
