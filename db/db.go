@@ -145,7 +145,7 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 				log.WithFields(log.Fields{"err": err, "path": path}).Panic("Creating path to store results")
 			}
 
-			shellCommand(fmt.Sprintf("mv %s/%s-%s/* %s", config.DB_SERVER_CCP_TMP, client_ip, server_ip, path), true)
+			shellCommand(fmt.Sprintf("mv %s/%s-%s/* %s", config.DB_SERVER_CCP_TMP, server_ip, client_ip, path), true)
 
 			full_path := path + "/" + filename
 			f, err := os.Create(full_path)

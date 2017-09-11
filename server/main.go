@@ -14,6 +14,7 @@ import (
 
 	"../config"
 	"../results"
+	"github.com/rdegges/go-ipify"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -267,7 +268,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 			}
 			log.Info("Proc killed")
 			// Copy logfile to database
-			remotepath := config.DB_SERVER_CCP_TMP + strings.Split(conn.LocalAddr().String(), ":")[0] + "-" + strings.Split(conn.RemoteAddr().String(), ":")[0] + "/"
+			remotepath := config.DB_SERVER_CCP_TMP + my_public_ip + "-" + strings.Split(conn.RemoteAddr().String(), ":")[0] + "/"
 			log.WithFields(log.Fields{"remotepath": remotepath}).Info("Copying to db")
 
 			shellCommand(fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=no %s mkdir -p %s", config.PATH_TO_PRIV_KEY, config.DB_SERVER, remotepath), true)
@@ -447,12 +448,21 @@ func shellCommand(cmd string, wait bool) *exec.Cmd {
 	return proc
 }
 
+var my_public_ip string
+
 func main() {
 	quit := make(chan struct{})
 
 	log.Info("Preparing TCP Probe")
 	shellCommand("sudo modprobe tcp_probe port="+config.MEASURE_SERVER_PORT+" full=1", true)
 	shellCommand("sudo chmod 444 /proc/net/tcpprobe", true)
+
+	my_public_ip, err := ipify.GetIp()
+	if err != nil {
+		log.Error("error finding public IP: ", err)
+	}
+	log.Info("Found my public IP")
+	log.Info(my_public_ip)
 
 	go measureServerTCP() // Measure TCP throughput
 	go measureServerUDP() // open port to measure UDP throughput
