@@ -139,7 +139,7 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 				server_file = fmt.Sprintf("%s_logs", location)
 			}
 			filename := fmt.Sprintf("%s_%s.log", client_ip, current_time)
-			path := fmt.Sprintf("exp_results/%s/%s", server_file, current_date)
+			path := fmt.Sprintf("/home/ubuntu/exp_results/%s/%s", server_file, current_date)
 			err := os.MkdirAll(path, 0777)
 			if err != nil {
 				log.WithFields(log.Fields{"err": err, "path": path}).Panic("Creating path to store results")

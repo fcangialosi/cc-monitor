@@ -68,7 +68,7 @@ const TRAIN_LENGTH = 8
 const PATH_TO_CCP = "/home/ubuntu/ccp/ccpl"
 const PATH_TO_PRIV_KEY = "/home/ubuntu/.ssh/rach.pem"
 const DB_SERVER = "ubuntu@34.230.33.142"
-const DB_SERVER_CCP_TMP = "/home/ubuntu/exp_results/ccp_tmp/"
+const DB_SERVER_CCP_TMP = "/home/ubuntu/exp_results/ccp_tmp"
 
 // alg names
 const REMY = "remy"
