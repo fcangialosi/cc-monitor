@@ -139,7 +139,6 @@ func handleSRTTRequest(conn *net.TCPConn) {
 	curTime := strings.Split(timePort, "->")[0]
 	clientPort := strings.Split(timePort, "->")[1]
 
-	log.Info("handle srtt request")
 	// filename = IP_time_tcpprobe.log
 	tcpprobeInfo := fmt.Sprintf("/home/ubuntu/cc-monitor/probes/%s_%s_tcpprobe.log", clientIP, curTime)
 
@@ -168,7 +167,6 @@ func handleSRTTRequest(conn *net.TCPConn) {
 		conn.Write(results.EncodeLossRTTInfo(&emptyRet))
 		return
 	}
-	log.Info("opened probe file")
 	defer probeFile.Close()
 	scanner := bufio.NewScanner(probeFile)
 	rttDict := make(map[float32]float32)
@@ -195,7 +193,6 @@ func handleSRTTRequest(conn *net.TCPConn) {
 		//log.WithFields(log.Fields{"first": firstTimestamp, "srtt": srtt / 1000, "timestamp": (timestamp - firstTimestamp)}).Info("stuff")
 		rttDict[float32((timestamp-firstTimestamp)*1000)] = float32(srtt / 1000)
 	}
-	log.Info("finished parsing file")
 
 	// need to send back this rttDict
 	lossRTTInfo := results.LossRTTInfo{LossRate: 0, Delay: rttDict}
@@ -255,7 +252,6 @@ func handleRequestTCP(conn *net.TCPConn) {
 			"--logfile=" + logname,
 		}
 		args_string := strings.Join(args, " ") + " " + params
-		log.WithFields(log.Fields{"args": args, "logname": logname, "args_string": args_string}).Info("exec")
 		// cmd := shellCommand(args_string, false)
 		cmd := exec.Command("sudo", strings.Split(args_string, " ")...)
 		if err := cmd.Start(); err != nil {
@@ -276,8 +272,6 @@ func handleRequestTCP(conn *net.TCPConn) {
 
 		// Give ccpl some time to startup
 		time.Sleep(1 * time.Second)
-
-		log.Info("Done waiting for CCPL")
 
 	} else {
 		ccname = alg
@@ -311,7 +305,6 @@ sendloop:
 	for {
 		select {
 		case <-on_timer:
-			log.Info("Finished")
 			break sendloop
 		default:
 			conn.Write(sendBuf)
