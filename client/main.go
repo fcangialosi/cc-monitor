@@ -467,6 +467,8 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 	// have loop for cycles here
 	cycle := 0
 	this_exp_time := exp_time
+	timed_out := true
+	num_finished := 0
 	for cycle < num_cycles {
 		// loop through each algorithm
 		for _, alg_line := range algs {
@@ -495,11 +497,14 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 			}
 
 			if proto == "tcp" {
-				runExperiment(measureTCP, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, 1, cycle, this_exp_time)
+				timed_out = runExperiment(measureTCP, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, 1, cycle, this_exp_time)
 			} else if proto == "udp" {
-				runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, 1, cycle, this_exp_time)
+				timed_out = runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, 1, cycle, this_exp_time)
 			} else {
 				log.Error("Unknown protocol!")
+			}
+			if !timed_out {
+				num_finished += 1
 			}
 
 			// write report so far into file
@@ -514,7 +519,9 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 
 	sendTime := currentTime()
 	report.SendTime = sendTime
-	sendReport(results.EncodeCCResults(&report))
+	if num_finished > 0 {
+		sendReport(results.EncodeCCResults(&report))
+	}
 	// write the file - has a send time
 	b := results.EncodeCCResults(&report)
 	err := ioutil.WriteFile(localResultsStorage, b, 0777)
@@ -590,7 +597,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.3-c5"
+	version := "v1.3-c6"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
@@ -652,6 +659,7 @@ func main() {
 				}
 			}
 		}
+		num_servers_contacted := 0
 		for _, d := range servers {
 			for ip, algs := range d {
 				sendTime := "NONE"
@@ -665,6 +673,9 @@ func main() {
 				}
 				log.WithFields(log.Fields{"ip": ip}).Info(fmt.Sprintf("Contacting Server %d/%d ", count, len(servers)))
 				sendTime, new_place = runExperimentOnMachine(ip, algs, num_cycles, place, total_experiments, *should_resume, exp_time)
+				if place != new_place {
+					num_servers_contacted += 1
+				}
 				place = new_place
 				sendMap[ip] = sendTime
 				count++
@@ -678,18 +689,20 @@ func main() {
 			}
 		}
 
-		// now ask the server for the link to the graph
-		log.Info("We will now give links to the graphs summarizing the experiment. They might not load immediately.")
-		count = 1
-		for IP, time := range sendMap {
-			if time == "NONE" {
-				continue
+		if num_servers_contacted > 0 {
+			// now ask the server for the link to the graph
+			log.Info("We will now give links to the graphs summarizing the experiment. They might not load immediately.")
+			count = 1
+			for IP, time := range sendMap {
+				if time == "NONE" {
+					continue
+				}
+				info := results.GraphInfo{ServerIP: IP, SendTime: time}
+				url := getURLFromServer(info)
+				result := fmt.Sprintf("View result # %d at %s\n", count, url)
+				log.Info(result)
+				count++
 			}
-			info := results.GraphInfo{ServerIP: IP, SendTime: time}
-			url := getURLFromServer(info)
-			result := fmt.Sprintf("View result # %d at %s\n", count, url)
-			log.Info(result)
-			count++
 		}
 		// delete all the files
 		for _, d := range servers {
@@ -709,5 +722,6 @@ func main() {
 
 	}
 
-	log.Info("All experiments finished! Thanks for helping us with our congestion control research.")
+	log.Info("All experiments finished.")
+
 }
