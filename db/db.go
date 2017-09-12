@@ -233,7 +233,7 @@ func getGraphInfo(ip_file string) {
 			if location != "NOT_FOUND" {
 				server_file = fmt.Sprintf("%s", location)
 			}
-			path := fmt.Sprintf("%s/%s/%s", server_file, current_date, current_time)
+			path := fmt.Sprintf("%s_logs/%s/%s", server_file, current_date, current_time)
 			// find the correct URL and return
 			URL := config.URL_PREFIX + "/" + path
 			conn.Write([]byte(URL))
