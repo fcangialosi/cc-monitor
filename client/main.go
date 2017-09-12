@@ -155,12 +155,12 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 		count++
 	}
 	log.WithFields(log.Fields{
-		"trial":                             cycle + 1,
-		"bytes_received":                    fmt.Sprintf("%.3f MBytes", float64(bytes_received)/1000000.0),
-		"last_received_data_at":             time.Duration(flow_throughputs[bytes_received]) * time.Millisecond,
-		"time_elapsed":                      elapsed(start) / 1000,
-		"throughput":                        fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[bytes_received], bytes_received)),
-		"avg delay as calculated by server": fmt.Sprintf("%.3f ms", fullDelay/count),
+		"trial":                 cycle + 1,
+		"bytes_received":        fmt.Sprintf("%.3f MBytes", float64(bytes_received)/1000000.0),
+		"last_received_data_at": time.Duration(flow_throughputs[bytes_received]) * time.Millisecond,
+		"time_elapsed":          elapsed(start) / 1000,
+		"throughput":            fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[bytes_received], bytes_received)),
+		"avg_delay":             fmt.Sprintf("%.3f ms", fullDelay/count),
 	}).Info("Finished Trial")
 
 	flow_times[config.END] = last_received_time
@@ -334,8 +334,8 @@ func measureUDP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 		"last_received_data_at": time.Duration(flow_throughputs[bytes_received]) * time.Millisecond,
 		"time_elapsed":          elapsed(start) / 1000,
 		"throughput":            fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[bytes_received], bytes_received)),
-		"loss rate":             lossRate,
-		"avg delay":             fmt.Sprintf("%.3f ms", delaySum/count),
+		"loss_rate":             lossRate,
+		"avg_delay":             fmt.Sprintf("%.3f ms", delaySum/count),
 	}).Info("Finished Trial")
 
 	flow_times[config.END] = last_received_time
@@ -590,15 +590,13 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.2-c34"
+	version := "v1.3-c1"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
 
-	log.Info("This script will contact different servers to transfer data using different congestion control algorithms, and records data about the performance of each algorithm. It may take around 10-15 minutes. We're trying to guage the performance of an algorithm designed by Remy, a program that automatically generates congestion control algorithms based on input parameters.")
-	log.Warn("In case the script doesn't run fully, it will write partial results to /tmp/cc-client_results-IP.log and /tmp/cc-client_progress.log in order to checkpoint progress. Next time the script runs, it will pick up from this progress")
-	// look for a local progress file -> just lists IPs the results have been sent to
-	// on completing a full run, will delete the file
+	log.Info("If this script fails to complete for any reason, re-run with the --resume flag to pick up where you left off.")
+
 	finishedIPs := make([]string, 0)
 	var progressFile *os.File
 	if _, err := os.Stat(config.LOCAL_PROGRESS_FILE); *should_resume && err == nil {
@@ -610,7 +608,6 @@ func main() {
 			finishedIPs = append(finishedIPs, scanner.Text())
 		}
 	} else {
-		log.Info("Opening file to record local progress: ", config.LOCAL_PROGRESS_FILE)
 		progressFile, err = os.OpenFile(config.LOCAL_PROGRESS_FILE, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644) // also creates file
 		CheckErrMsg(err, "Creating file to record local progress")
 	}
