@@ -277,6 +277,8 @@ func handleRequestTCP(conn *net.TCPConn) {
 		ccname = alg
 	}
 	syscall.SetsockoptString(int(file.Fd()), syscall.IPPROTO_TCP, config.TCP_CONGESTION, ccname)
+	conn.SetWriteBuffer(8388608)
+	conn.SetReadBuffer(8388608)
 
 	conn.Write(startBuf)
 	buf := make([]byte, config.ACK_LEN)
