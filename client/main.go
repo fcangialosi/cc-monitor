@@ -85,7 +85,6 @@ func measureTCP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 
 	for {
 		n, err := conn.Read(recvBuf)
-		conn.SetReadDeadline(time.Time{})
 		if err == io.EOF {
 			log.Info("Received EOF from tcp connection end")
 			log.Error(err)
@@ -109,7 +108,6 @@ func measureTCP(server_ip string, alg string, start_ch chan time.Time, end_ch ch
 			conn.Write([]byte(config.ACK))
 			// do not count this start flow message as the first measurement
 			n -= config.START_FLOW_LEN
-			conn.SetReadDeadline(time.Now().Add(time.Second * 10))
 		}
 		// measure throughput
 		bytes_received += float64(n)
