@@ -148,8 +148,8 @@ func handleSRTTRequest(conn *net.TCPConn) {
 	open := false
 	tries := 0
 	for !(open) && tries < 5 {
-		if _, err := os.Stat(tcpprobeInfo); os.IsNotExist(err) {
-			log.Info("couldn't find tcpprobe file, trying again...")
+		if stats, err := os.Stat(tcpprobeInfo); os.IsNotExist(err) || stats.Size() == 0 {
+			log.Info("TCP Probe file empty or does not exist, trying again in 2 seconds...")
 			tries++
 			time.Sleep(time.Second * 2)
 		} else {
