@@ -244,7 +244,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 	// Start CCP process in the background
 	if alg[:3] == "ccp" {
 		ccname = "ccp"
-		logname := fmt.Sprintf("%s_%s.log", alg, strings.Replace(params, " ", "_", -1))
+		logname := fmt.Sprintf("/home/ubuntu/cc-monitor/ccp_logs/%s_%s_%s.log", alg, strings.Replace(params, " ", "_", -1), currentTime())
 		args := []string{
 			config.PATH_TO_CCP,
 			"--datapath=kernel",
