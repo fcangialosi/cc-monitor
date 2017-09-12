@@ -17,6 +17,7 @@ import (
 
 	"../config"
 	"../results"
+	"../shared"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -49,7 +50,7 @@ func measureThroughput(start time.Time, bytes_received uint32, m results.BytesTi
 }
 
 /*Record TCP throughput*/
-func measureTCP(server_ip string, alg string, num_cycles int, cycle int) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool) {
+func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool) {
 	flow_throughputs := results.BytesTimeMap{}
 	flow_times := results.OnOffMap{}
 	delay := results.TimeRTTMap{}
@@ -114,7 +115,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int) (result
 
 		if !started_flow {
 			started_flow = true
-			dline := time.Now().Add(config.CLIENT_TIMEOUT * time.Second)
+			dline := time.Now().Add(exp_time * time.Second)
 			conn.SetReadDeadline(dline)
 			// log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
 		}
@@ -167,7 +168,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int) (result
 
 }
 
-func measureUDP(server_ip string, alg string, num_cycles int, cycle int) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool) {
+func measureUDP(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool) {
 	timed_out := false
 	flow_throughputs := results.BytesTimeMap{}
 	flow_times := results.OnOffMap{}
@@ -287,7 +288,7 @@ func measureUDP(server_ip string, alg string, num_cycles int, cycle int) (result
 	}
 
 	// initial timeout -> 30 Seconds
-	dline := time.Now().Add(config.CLIENT_TIMEOUT * time.Second)
+	dline := time.Now().Add(exp_time * time.Second)
 	receiver.SetReadDeadline(dline)
 
 	for {
@@ -339,13 +340,13 @@ func measureUDP(server_ip string, alg string, num_cycles int, cycle int) (result
 	return flow_throughputs, flow_times, timeRTTMap, timed_out
 }
 
-func runExperiment(f func(server_ip string, alg string, num_cycles int, cycle int) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool), IP string, alg string, report *results.CCResults, protocol string, port string, num_cycles int, cycle int) bool {
+func runExperiment(f func(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool), IP string, alg string, report *results.CCResults, protocol string, port string, num_cycles int, cycle int, exp_time time.Duration) bool {
 	throughput := make(results.BytesTimeMap)
 	flow_times := make(results.OnOffMap)
 	time_map := make(results.TimeRTTMap)
 	timed_out := false
 
-	throughput, flow_times, time_map, timed_out = f(IP, alg, num_cycles, cycle)
+	throughput, flow_times, time_map, timed_out = f(IP, alg, num_cycles, cycle, exp_time)
 
 	if !timed_out {
 		report.Throughput[alg][cycle] = throughput
@@ -414,19 +415,7 @@ func getSendTimeLocalFile(localResultsStorage string) string { // if there is a 
 	return tempReport.SendTime
 }
 
-func parseAlg(line string) (string, string) {
-	sp := strings.Split(line, "/")
-	return sp[0], sp[1]
-}
-
-func parseAlgParams(line string) (string, []string) {
-	sp := strings.Split(line, " ")
-	alg := strings.ToLower(sp[0])
-	params := sp[1:]
-	return alg, params
-}
-
-func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int, total_experiments int, record bool) (string, int) {
+func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int, total_experiments int, record bool, exp_time time.Duration) (string, int) {
 	localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, IP)
 	report := results.CCResults{
 		ServerIP:   IP,
@@ -466,7 +455,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 	useTemp := (tempReport.ServerIP == IP && record)
 
 	for _, alg_line := range algs {
-		_, alg := parseAlg(alg_line)
+		_, alg := shared.ParseAlg(alg_line)
 		report.Throughput[alg] = make([]results.BytesTimeMap, num_cycles)
 		report.Delay[alg] = make([]results.TimeRTTMap, num_cycles)
 		report.FlowTimes[alg] = make([]results.OnOffMap, num_cycles)
@@ -475,10 +464,11 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 	// go through the temporary
 	// have loop for cycles here
 	cycle := 0
+	this_exp_time := exp_time
 	for cycle < num_cycles {
 		// loop through each algorithm
 		for _, alg_line := range algs {
-			proto, alg := parseAlg(alg_line)
+			proto, alg := shared.ParseAlg(alg_line)
 
 			// check if the result is in the report read at beginning of the function
 			if useTemp && (len(tempReport.Throughput[alg][cycle]) > 0) && (len(tempReport.Delay[alg][cycle]) > 0) && (len(tempReport.FlowTimes[alg][cycle]) > 0) {
@@ -492,10 +482,20 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 				log.WithFields(log.Fields{"alg": alg, "proto": proto, "server": IP}).Info(fmt.Sprintf("Starting Experiment %d of %d", place+1, total_experiments))
 			}
 
+			this_exp_time = exp_time
+			if manual_exp_time, ok := shared.ParseAlgParams(alg)["exp_time"]; ok {
+				new_exp_time, err := time.ParseDuration(manual_exp_time)
+				if err != nil {
+					log.Warn("unable to parse experiment time from params: ", manual_exp_time)
+				} else {
+					this_exp_time = new_exp_time
+				}
+			}
+
 			if proto == "tcp" {
-				runExperiment(measureTCP, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, 1, cycle)
+				runExperiment(measureTCP, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, 1, cycle, this_exp_time)
 			} else if proto == "udp" {
-				runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, 1, cycle)
+				runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, 1, cycle, this_exp_time)
 			} else {
 				log.Error("Unknown protocol!")
 			}
@@ -548,10 +548,11 @@ func getURLFromServer(gg results.GraphInfo) string {
 type ServerList []map[string][]string
 type YAMLConfig struct {
 	Num_cycles int
+	Exp_time   string
 	Servers    ServerList
 }
 
-func ParseYAMLConfig(config_file string) (ServerList, int) {
+func ParseYAMLConfig(config_file string) (ServerList, int, time.Duration) {
 	config := YAMLConfig{}
 	data, err := ioutil.ReadFile(config_file)
 	if err != nil {
@@ -563,12 +564,15 @@ func ParseYAMLConfig(config_file string) (ServerList, int) {
 		log.Warn("Hint: make sure you're only using spaces, not tabs!")
 		log.Fatal("Error parsing config file: ", err)
 	}
-	return config.Servers, config.Num_cycles
+	exp_time, err := time.ParseDuration(config.Exp_time)
+	if err != nil {
+		log.Fatal("Config contains invalid exp_time, expected format: [0-9]?(s|m|h)")
+	}
+	return config.Servers, config.Num_cycles, exp_time
 }
 
 var use_mm = flag.Bool("mm", false, "If true, connect to a local server from inside a mahimahi shell")
 var manual_algs = flag.String("algs", "", "Specify a comma-separated list of algorithms to test, e.g. \"tcp-cubic,tcp-reno\"")
-var cycles = flag.Int("cycles", 0, "Specify number of trials for each algorithms")
 var local_iplist = flag.String("config", "", "Filename to read ips and algorithms from rather than pulling from server")
 var should_resume = flag.Bool("resume", false, "Resume from most recent unfinished run")
 
@@ -584,7 +588,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.2-c25"
+	version := "v1.2-c26"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
@@ -603,8 +607,6 @@ func main() {
 		for scanner.Scan() {
 			finishedIPs = append(finishedIPs, scanner.Text())
 		}
-		log.Info("Waiting 30 seconds before resuming to prevent conflicting with previous experiment (the server may still be sending")
-		time.Sleep(30 * time.Second)
 	} else {
 		log.Info("Opening file to record local progress: ", config.LOCAL_PROGRESS_FILE)
 		progressFile, err = os.OpenFile(config.LOCAL_PROGRESS_FILE, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644) // also creates file
@@ -623,23 +625,18 @@ func main() {
 			algs = strings.Split(*manual_algs, ",")
 		}
 		num_cycles := 1
-		if *cycles != 0 {
-			num_cycles = *cycles
-		}
-		runExperimentOnMachine(mahimahi, algs, num_cycles, 0, len(algs)*num_cycles, false)
+		runExperimentOnMachine(mahimahi, algs, num_cycles, 0, len(algs)*num_cycles, false, 30*time.Second)
 	} else { // contact DB for files
 		var servers ServerList
 		var num_cycles int
+		var exp_time time.Duration
 		if *local_iplist != "" {
 			if _, err := os.Stat(*local_iplist); os.IsNotExist(err) {
 				log.Fatal("Unable to find config file ", *local_iplist)
 			}
-			servers, num_cycles = ParseYAMLConfig(*local_iplist)
+			servers, num_cycles, exp_time = ParseYAMLConfig(*local_iplist)
 		} else {
 			log.Fatal("Remote server list not yet supported. Please provide a local config file.")
-		}
-		if *cycles != 0 {
-			num_cycles = *cycles
 		}
 
 		sendMap := make(map[string]string) // maps IPs to times the report was sent
@@ -668,7 +665,7 @@ func main() {
 					continue
 				}
 				log.WithFields(log.Fields{"ip": ip}).Info(fmt.Sprintf("Contacting Server %d/%d ", count, len(servers)))
-				sendTime, new_place = runExperimentOnMachine(ip, algs, num_cycles, place, total_experiments, *should_resume)
+				sendTime, new_place = runExperimentOnMachine(ip, algs, num_cycles, place, total_experiments, *should_resume, exp_time)
 				place = new_place
 				sendMap[ip] = sendTime
 				count++

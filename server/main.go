@@ -14,6 +14,7 @@ import (
 
 	"../config"
 	"../results"
+	"../shared"
 	"github.com/rdegges/go-ipify"
 	log "github.com/sirupsen/logrus"
 )
@@ -223,7 +224,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 	curTime := reqTime[0]
 	alg := reqTime[1]
 	params := reqTime[2]
-	parsed_params := parseAlgParams(params)
+	parsed_params := shared.ParseAlgParams(params)
 
 	log.WithFields(log.Fields{"curTime": curTime, "alg": alg, "params": params, "parsed_params": parsed_params}).Info("Parsed client req")
 
@@ -325,16 +326,6 @@ sendloop:
 	}
 	log.Info("Probe killed")
 
-	return
-}
-
-func parseAlgParams(line string) (params map[string]string) {
-	params = make(map[string]string)
-	sp := strings.Split(line, " ")
-	for _, param := range sp {
-		kv := strings.Split(param, "=")
-		params[kv[0]] = kv[1]
-	}
 	return
 }
 
