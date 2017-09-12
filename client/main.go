@@ -102,6 +102,9 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	conn.SetReadDeadline(dline)
 	localPort := strings.Split(conn.LocalAddr().String(), ":")[1]
 
+	conn.SetReadBuffer(8388608)
+	conn.SetWriteBuffer(8388608)
+
 	for {
 		//log.Info("Waiting to read")
 
@@ -601,7 +604,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "-c1"
+	version := "v1.4-c1"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
