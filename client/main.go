@@ -417,7 +417,7 @@ func getSendTimeLocalFile(localResultsStorage string) string { // if there is a 
 	return tempReport.SendTime
 }
 
-func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int, total_experiments int, record bool, exp_time time.Duration) (string, int) {
+func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int, total_experiments int, record bool, exp_time time.Duration) (string, int, int) {
 	localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, IP)
 	report := results.CCResults{
 		ServerIP:   IP,
@@ -526,7 +526,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 	b := results.EncodeCCResults(&report)
 	err := ioutil.WriteFile(localResultsStorage, b, 0777)
 	CheckErrMsg(err, "Writing file into bytes")
-	return sendTime, place
+	return sendTime, place, num_finished
 }
 
 func currentTime() string {
@@ -597,7 +597,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.3-c6"
+	version := "v1.3-c7"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
@@ -659,6 +659,7 @@ func main() {
 				}
 			}
 		}
+		num_finished := 0
 		num_servers_contacted := 0
 		for _, d := range servers {
 			for ip, algs := range d {
@@ -672,8 +673,8 @@ func main() {
 					continue
 				}
 				log.WithFields(log.Fields{"ip": ip}).Info(fmt.Sprintf("Contacting Server %d/%d ", count, len(servers)))
-				sendTime, new_place = runExperimentOnMachine(ip, algs, num_cycles, place, total_experiments, *should_resume, exp_time)
-				if place != new_place {
+				sendTime, new_place, num_finished = runExperimentOnMachine(ip, algs, num_cycles, place, total_experiments, *should_resume, exp_time)
+				if num_finished > 0 {
 					num_servers_contacted += 1
 				}
 				place = new_place
