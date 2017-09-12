@@ -67,11 +67,15 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	bytes_received := uint32(0)
 
 	// start connection
-	conn, err := net.DialTimeout("tcp", server_ip+":"+config.MEASURE_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
+	gen_conn, err := net.DialTimeout("tcp", server_ip+":"+config.MEASURE_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
 	if CheckErrMsg(err, "tcp connection to server") {
 		time.Sleep(2 * time.Second)
 		return flow_throughputs, flow_times, delay, true
 	}
+
+	var conn *net.TCPConn
+	conn = gen_conn.(*net.TCPConn)
+
 	// write timestamp for server to be able to identify this client connection later
 	curTime := currentTime()
 	if _, ok := shared.ParseAlgParams(alg)["exp_time"]; !ok {
@@ -604,7 +608,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.4-c1"
+	version := "v1.4-c2"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
