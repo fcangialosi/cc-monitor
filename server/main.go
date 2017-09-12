@@ -222,15 +222,11 @@ func handleRequestTCP(conn *net.TCPConn) {
 		return
 	}
 
-	log.WithFields(log.Fields{"req": string(reqBuf)}).Info("Read from client")
-
 	reqTime := strings.SplitN(string(reqBuf[:n]), " ", 3)
 	curTime := reqTime[0]
 	alg := reqTime[1]
 	params := reqTime[2]
 	parsed_params := parseAlgParams(params)
-
-	log.WithFields(log.Fields{"curTime": curTime, "alg": alg, "params": params, "parsed_params": parsed_params}).Info("Parsed client req")
 
 	on_time := time.Millisecond * config.MEAN_ON_TIME_MS
 	if manual_exp_time, ok := parsed_params["exp_time"]; ok {
@@ -241,8 +237,6 @@ func handleRequestTCP(conn *net.TCPConn) {
 			on_time = new_on_time
 		}
 	}
-
-	log.WithFields(log.Fields{"on_time": on_time}).Info("Starting experiment")
 
 	file, err := conn.File()
 	if err != nil {
@@ -267,22 +261,16 @@ func handleRequestTCP(conn *net.TCPConn) {
 		if err := cmd.Start(); err != nil {
 			log.WithFields(log.Fields{"err": err, "cmd": cmd}).Error("Error starting ccpl")
 		}
-		log.Info("Command started.")
 
 		defer func() {
-			log.Info("Running from defer")
 			if err := cmd.Process.Kill(); err != nil {
 				log.Warn("error stopping ccpl")
 			}
-			log.Info("Proc killed")
 			// Copy logfile to database
 			remotepath := config.DB_SERVER_CCP_TMP + my_public_ip + "-" + strings.Split(conn.RemoteAddr().String(), ":")[0] + "/"
-			log.WithFields(log.Fields{"remotepath": remotepath}).Info("Copying to db")
 
 			shellCommand(fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=no %s mkdir -p %s", config.PATH_TO_PRIV_KEY, config.DB_SERVER, remotepath), true)
 			shellCommand(fmt.Sprintf("scp -i %s %s %s:%s", config.PATH_TO_PRIV_KEY, logname, config.DB_SERVER, remotepath), true)
-
-			log.Info("done defer")
 
 		}()
 
@@ -294,14 +282,11 @@ func handleRequestTCP(conn *net.TCPConn) {
 	} else {
 		ccname = alg
 	}
-	log.Info("setting sockopt to ", ccname)
 	syscall.SetsockoptString(int(file.Fd()), syscall.IPPROTO_TCP, config.TCP_CONGESTION, ccname)
 
-	log.Info("sending ack")
 	conn.Write(startBuf)
 	buf := make([]byte, config.ACK_LEN)
 	conn.Read(buf) // wait for ack back
-	log.Info("Connection established, starting sendloop")
 
 	// NOTE: for mahimahi, grepping for client port will result in lines both from server -> NAT and NAT -> client
 	// we would want NAT -> client lines -> so hack, just check for "ffff"
