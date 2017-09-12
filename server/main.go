@@ -14,7 +14,6 @@ import (
 
 	"../config"
 	"../results"
-	"../shared"
 	"github.com/rdegges/go-ipify"
 	log "github.com/sirupsen/logrus"
 )
@@ -140,8 +139,9 @@ func handleSRTTRequest(conn *net.TCPConn) {
 	curTime := strings.Split(timePort, "->")[0]
 	clientPort := strings.Split(timePort, "->")[1]
 
+	log.Info("handle srtt request")
 	// filename = IP_time_tcpprobe.log
-	tcpprobeInfo := fmt.Sprintf("%s_%s_tcpprobe.log", clientIP, curTime)
+	tcpprobeInfo := fmt.Sprintf("/home/ubuntu/cc-monitor/probes/%s_%s_tcpprobe.log", clientIP, curTime)
 
 	// manually PARSE the file for the srtt info and get an array of RTTs
 	// open the tcpprobe file line by line and read it
@@ -149,6 +149,7 @@ func handleSRTTRequest(conn *net.TCPConn) {
 	tries := 0
 	for !(open) && tries < 5 {
 		if _, err := os.Stat(tcpprobeInfo); os.IsNotExist(err) {
+			log.Info("couldn't find tcpprobe file, trying again...")
 			tries++
 			time.Sleep(time.Second * 2)
 		} else {
@@ -157,6 +158,7 @@ func handleSRTTRequest(conn *net.TCPConn) {
 	}
 	emptyRet := results.LossRTTInfo{Delay: results.TimeRTTMap{}, LossRate: 0}
 	if tries >= 5 {
+		log.Info("sending empty rtt info")
 		conn.Write(results.EncodeLossRTTInfo(&emptyRet))
 		return
 	}
@@ -166,6 +168,7 @@ func handleSRTTRequest(conn *net.TCPConn) {
 		conn.Write(results.EncodeLossRTTInfo(&emptyRet))
 		return
 	}
+	log.Info("opened probe file")
 	defer probeFile.Close()
 	scanner := bufio.NewScanner(probeFile)
 	rttDict := make(map[float32]float32)
@@ -192,6 +195,7 @@ func handleSRTTRequest(conn *net.TCPConn) {
 		//log.WithFields(log.Fields{"first": firstTimestamp, "srtt": srtt / 1000, "timestamp": (timestamp - firstTimestamp)}).Info("stuff")
 		rttDict[float32((timestamp-firstTimestamp)*1000)] = float32(srtt / 1000)
 	}
+	log.Info("finished parsing file")
 
 	// need to send back this rttDict
 	lossRTTInfo := results.LossRTTInfo{LossRate: 0, Delay: rttDict}
@@ -224,7 +228,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 	curTime := reqTime[0]
 	alg := reqTime[1]
 	params := reqTime[2]
-	parsed_params := shared.ParseAlgParams(params)
+	parsed_params := parseAlgParams(params)
 
 	log.WithFields(log.Fields{"curTime": curTime, "alg": alg, "params": params, "parsed_params": parsed_params}).Info("Parsed client req")
 
@@ -302,11 +306,20 @@ func handleRequestTCP(conn *net.TCPConn) {
 	// NOTE: for mahimahi, grepping for client port will result in lines both from server -> NAT and NAT -> client
 	// we would want NAT -> client lines -> so hack, just check for "ffff"
 	parseString := clientPort
-	probeLog := fmt.Sprintf("%s_%s_tcpprobe.log", clientIP, curTime)
-	probe := exec.Command("/bin/bash", "/home/ubuntu/cc-monitor/start_tcp_probe.sh", parseString, probeLog)
-	if err := probe.Run(); err != nil {
-		log.WithFields(log.Fields{"err": err}).Error("Error starting tcpprobe")
-	}
+	probeLog := fmt.Sprintf("/home/ubuntu/cc-monitor/probes/%s_%s_tcpprobe.log", clientIP, curTime)
+	probe := shellCommand("cat /proc/net/tcpprobe | grep "+parseString+" > "+probeLog, false)
+	/*
+		probe := exec.Command("/bin/bash", "/home/ubuntu/cc-monitor/start_tcp_probe.sh", parseString, probeLog)
+		if err := probe.Start(); err != nil {
+			log.WithFields(log.Fields{"err": err}).Error("Error starting tcpprobe")
+		}
+	*/
+	defer func() {
+		if err := probe.Process.Kill(); err != nil {
+			log.Warn("error stopping probe")
+		}
+		log.Info("Probe killed")
+	}()
 
 	on_timer := time.After(on_time)
 sendloop:
@@ -316,16 +329,21 @@ sendloop:
 			log.Info("Finished")
 			break sendloop
 		default:
-			//log.Warn("Waiting to write to TCP connection")
 			conn.Write(sendBuf)
 		}
 	}
 	log.Info("Done. Closing connection...")
-	if err := probe.Process.Kill(); err != nil {
-		log.Warn("error stopping probe")
-	}
-	log.Info("Probe killed")
 
+	return
+}
+
+func parseAlgParams(line string) (params map[string]string) {
+	params = make(map[string]string)
+	sp := strings.Split(line, " ")
+	for _, param := range sp {
+		kv := strings.Split(param, "=")
+		params[kv[0]] = kv[1]
+	}
 	return
 }
 
@@ -451,6 +469,8 @@ func main() {
 	quit := make(chan struct{})
 
 	log.Info("Preparing TCP Probe")
+	shellCommand("sudo rmmod tcp_probe", true)
+	//	shellCommand("sudo modprobe tcp_probe full=1", true)
 	shellCommand("sudo modprobe tcp_probe port="+config.MEASURE_SERVER_PORT+" full=1", true)
 	shellCommand("sudo chmod 444 /proc/net/tcpprobe", true)
 

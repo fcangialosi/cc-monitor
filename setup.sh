@@ -30,6 +30,10 @@ echo "===> Loading necessary kernel modules (tcpprobe, tcp_bbr, tcp_vegas)..."
 sudo modprobe tcp_bbr
 # Load TCP Vegas
 sudo modprobe tcp_vegas
+# Load CCP
+cd /home/ubuntu/ccp-kernel/
+sudo insmod ccp.ko
+cd -
 
 echo "===> Setting kernel params..."
 
