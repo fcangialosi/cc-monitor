@@ -115,9 +115,9 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 
 		if !started_flow {
 			started_flow = true
-			dline := time.Now().Add(exp_time * time.Second)
+			dline := time.Now().Add(exp_time)
 			conn.SetReadDeadline(dline)
-			// log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
+			log.WithFields(log.Fields{"deadline": dline, "exp_time": exp_time}).Info("set read deadline")
 		}
 
 		bytes_received += uint32(n)
@@ -125,6 +125,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 		measureThroughput(start, bytes_received, flow_throughputs)
 
 	}
+	log.Info("done sending, getting rtt info from server...")
 	conn2, err := net.DialTimeout("tcp", server_ip+":"+config.SRTT_INFO_PORT, config.CONNECT_TIMEOUT*time.Second)
 	if CheckErrMsg(err, "tcp connection to server") {
 		time.Sleep(2 * time.Second)
@@ -288,7 +289,7 @@ func measureUDP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	}
 
 	// initial timeout -> 30 Seconds
-	dline := time.Now().Add(exp_time * time.Second)
+	dline := time.Now().Add(exp_time)
 	receiver.SetReadDeadline(dline)
 
 	for {
@@ -588,7 +589,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.2-c28"
+	version := "v1.2-c29"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
