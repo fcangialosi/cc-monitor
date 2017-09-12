@@ -489,6 +489,8 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 				} else {
 					this_exp_time = new_exp_time
 				}
+			} else {
+				alg = alg + " exp_time=" + exp_time.String()
 			}
 
 			if proto == "tcp" {
@@ -587,7 +589,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.2-c32"
+	version := "v1.2-c33"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
