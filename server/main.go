@@ -206,8 +206,6 @@ func handleRequestTCP(conn *net.TCPConn) {
 	clientIP := strings.Split(clientIPPort, ":")[0]
 	clientPort := strings.Split(clientIPPort, ":")[1]
 
-	log.WithFields(log.Fields{"client": clientIPPort}).Info("New measurement requested")
-
 	startBuf := []byte("START_FLOW")
 	reqBuf := make([]byte, config.MAX_REQ_SIZE)
 	n, err := conn.Read(reqBuf)
@@ -218,6 +216,8 @@ func handleRequestTCP(conn *net.TCPConn) {
 		log.Error("read 0 bytes from client")
 		return
 	}
+
+	log.WithFields(log.Fields{"client": clientIPPort, "req": string(reqBuf[:n]), "now": time.Now()}).Info("New measurement requested")
 
 	reqTime := strings.SplitN(string(reqBuf[:n]), " ", 3)
 	curTime := reqTime[0]

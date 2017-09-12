@@ -74,6 +74,9 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	}
 	// write timestamp for server to be able to identify this client connection later
 	curTime := currentTime()
+	if _, ok := shared.ParseAlgParams(alg)["exp_time"]; !ok {
+		alg = alg + " exp_time=" + exp_time.String()
+	}
 	algTime := fmt.Sprintf("%s %s", curTime, alg)
 	conn.Write([]byte(algTime))
 	// now wait for start
@@ -489,8 +492,6 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 				} else {
 					this_exp_time = new_exp_time
 				}
-			} else {
-				alg = alg + " exp_time=" + exp_time.String()
 			}
 
 			if proto == "tcp" {
@@ -589,7 +590,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.2-c33"
+	version := "v1.2-c34"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
