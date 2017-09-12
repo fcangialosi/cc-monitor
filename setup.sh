@@ -45,9 +45,15 @@ sudo sysctl -w net.core.rmem_default=8388608
 ALGS=`cat /proc/sys/net/ipv4/tcp_available_congestion_control`
 echo $ALGS > /proc/sys/net/ipv4/tcp_allowed_congestion_control
 
+echo "===> Enabling fq qdisc..."
 # enable fq, which is necessary for bbr pacing to work correctly
 sudo sysctl -w net.core.default_qdisc=fq
 sudo tc qdisc replace dev eth0 root fq
+
+echo "===> Creating directories..."
+mkdir -p /home/ubuntu/cc-monitor/probes
+mkdir -p /home/ubuntu/cc-monitor/ccp_logs
+
 echo "===> Done."
 echo "===> IMPORTANT: Before running BBR, check that the fq qdisc is currently turned on using 'sudo tc qdisc show'"
 
