@@ -84,6 +84,9 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	if string(recvBuf[:n]) != config.START_FLOW {
 		log.Error("Did not receive start from server")
 	}
+
+	log.Info("Connection established.")
+
 	// now start the timer
 	start := time.Now() // start of flow is when client sends first message to send back data
 	flow_times[config.START] = float32(start.Sub(original_start).Seconds() * 1000)
@@ -98,7 +101,6 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	dline := time.Now().Add(config.CLIENT_TIMEOUT * time.Second)
 	conn.SetReadDeadline(dline)
 	localPort := strings.Split(conn.LocalAddr().String(), ":")[1]
-	// log.WithFields(log.Fields{"deadline": dline}).Info("set read deadline")
 
 	for {
 		//log.Info("Waiting to read")
@@ -288,6 +290,8 @@ func measureUDP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 		break
 
 	}
+
+	log.Info("Hole punch successful. Connection established.")
 
 	// initial timeout -> 30 Seconds
 	dline := time.Now().Add(exp_time)
@@ -597,7 +601,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.3-c7"
+	version := "v1.3-c8"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
