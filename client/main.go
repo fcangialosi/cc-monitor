@@ -564,7 +564,6 @@ func PullConfigFromServer() (shared.ServerList, int, time.Duration, bool) {
 
 	config := shared.DecodeConfig(recv_buf[:n])
 	exp_time, err := time.ParseDuration(config.Exp_time)
-	log.Info(config)
 	if err != nil {
 		log.Fatal("Config contains invalid exp_time, expected format: [0-9]?(s|m|h)")
 	}
@@ -588,7 +587,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.4-c7"
+	version := "v1.4-c8"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
