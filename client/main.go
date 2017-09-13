@@ -50,7 +50,7 @@ func measureThroughput(start time.Time, bytes_received uint32, m results.BytesTi
 }
 
 /*Record TCP throughput*/
-func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool) {
+func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool) {
 	flow_throughputs := results.BytesTimeMap{}
 	flow_times := results.OnOffMap{}
 	delay := results.TimeRTTMap{}
@@ -76,17 +76,25 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	var conn *net.TCPConn
 	conn = gen_conn.(*net.TCPConn)
 
+	defer conn.Close()
+
 	// write timestamp for server to be able to identify this client connection later
 	curTime := currentTime()
 	if _, ok := shared.ParseAlgParams(alg)["exp_time"]; !ok {
 		alg = alg + " exp_time=" + exp_time.String()
 	}
-	algTime := fmt.Sprintf("%s %s", curTime, alg)
+	algTime := fmt.Sprintf("%s %t %s", curTime, lock_servers, alg)
 	conn.Write([]byte(algTime))
 	// now wait for start
 	n, err := conn.Read(recvBuf)
-	if string(recvBuf[:n]) != config.START_FLOW {
+	resp := string(recvBuf[:n])
+	if resp == config.SERVER_LOCKED {
+		log.Warn("Server currently locked for another experiment. Skipping...")
+		return flow_throughputs, flow_times, delay, true
+	}
+	if resp != config.START_FLOW {
 		log.Error("Did not receive start from server")
+		return flow_throughputs, flow_times, delay, true
 	}
 
 	log.Info("Connection established.")
@@ -106,10 +114,12 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	conn.SetReadDeadline(dline)
 	localPort := strings.Split(conn.LocalAddr().String(), ":")[1]
 
-	err = conn.SetReadBuffer(8388608)
-	CheckErrMsg(err, "set read buffer")
-	err = conn.SetWriteBuffer(8388608)
-	CheckErrMsg(err, "set write buffer")
+	/*
+		err = conn.SetReadBuffer(8388608)
+		CheckErrMsg(err, "set read buffer")
+		err = conn.SetWriteBuffer(8388608)
+		CheckErrMsg(err, "set write buffer")
+	*/
 
 	for {
 		//log.Info("Waiting to read")
@@ -175,13 +185,12 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	}).Info("Finished Trial")
 
 	flow_times[config.END] = last_received_time
-	conn.Close() // close connection before next one
 
 	return flow_throughputs, flow_times, delay, false
 
 }
 
-func measureUDP(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool) {
+func measureUDP(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool) {
 	timed_out := false
 	flow_throughputs := results.BytesTimeMap{}
 	flow_times := results.OnOffMap{}
@@ -355,13 +364,13 @@ func measureUDP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	return flow_throughputs, flow_times, timeRTTMap, timed_out
 }
 
-func runExperiment(f func(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool), IP string, alg string, report *results.CCResults, protocol string, port string, num_cycles int, cycle int, exp_time time.Duration) bool {
+func runExperiment(f func(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool), IP string, alg string, report *results.CCResults, protocol string, port string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool) bool {
 	throughput := make(results.BytesTimeMap)
 	flow_times := make(results.OnOffMap)
 	time_map := make(results.TimeRTTMap)
 	timed_out := false
 
-	throughput, flow_times, time_map, timed_out = f(IP, alg, num_cycles, cycle, exp_time)
+	throughput, flow_times, time_map, timed_out = f(IP, alg, num_cycles, cycle, exp_time, lock_servers)
 
 	if !timed_out {
 		report.Throughput[alg][cycle] = throughput
@@ -430,7 +439,7 @@ func getSendTimeLocalFile(localResultsStorage string) string { // if there is a 
 	return tempReport.SendTime
 }
 
-func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int, total_experiments int, record bool, exp_time time.Duration) (string, int, int) {
+func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int, total_experiments int, record bool, exp_time time.Duration, lock_servers bool) (string, int, int) {
 	localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, IP)
 	report := results.CCResults{
 		ServerIP:   IP,
@@ -510,9 +519,9 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 			}
 
 			if proto == "tcp" {
-				timed_out = runExperiment(measureTCP, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, 1, cycle, this_exp_time)
+				timed_out = runExperiment(measureTCP, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, 1, cycle, this_exp_time, lock_servers)
 			} else if proto == "udp" {
-				timed_out = runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, 1, cycle, this_exp_time)
+				timed_out = runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, 1, cycle, this_exp_time, lock_servers)
 			} else {
 				log.Error("Unknown protocol!")
 			}
@@ -569,12 +578,13 @@ func getURLFromServer(gg results.GraphInfo) string {
 
 type ServerList []map[string][]string
 type YAMLConfig struct {
-	Num_cycles int
-	Exp_time   string
-	Servers    ServerList
+	Num_cycles   int
+	Exp_time     string
+	Lock_servers bool
+	Servers      ServerList
 }
 
-func ParseYAMLConfig(config_file string) (ServerList, int, time.Duration) {
+func ParseYAMLConfig(config_file string) (ServerList, int, time.Duration, bool) {
 	config := YAMLConfig{}
 	data, err := ioutil.ReadFile(config_file)
 	if err != nil {
@@ -590,7 +600,7 @@ func ParseYAMLConfig(config_file string) (ServerList, int, time.Duration) {
 	if err != nil {
 		log.Fatal("Config contains invalid exp_time, expected format: [0-9]?(s|m|h)")
 	}
-	return config.Servers, config.Num_cycles, exp_time
+	return config.Servers, config.Num_cycles, exp_time, config.Lock_servers
 }
 
 var use_mm = flag.Bool("mm", false, "If true, connect to a local server from inside a mahimahi shell")
@@ -610,7 +620,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.4-c3"
+	version := "v1.4-c4"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
@@ -644,16 +654,17 @@ func main() {
 			algs = strings.Split(*manual_algs, ",")
 		}
 		num_cycles := 1
-		runExperimentOnMachine(mahimahi, algs, num_cycles, 0, len(algs)*num_cycles, false, 30*time.Second)
+		runExperimentOnMachine(mahimahi, algs, num_cycles, 0, len(algs)*num_cycles, false, 30*time.Second, false)
 	} else { // contact DB for files
 		var servers ServerList
 		var num_cycles int
 		var exp_time time.Duration
+		var lock_servers bool
 		if *local_iplist != "" {
 			if _, err := os.Stat(*local_iplist); os.IsNotExist(err) {
 				log.Fatal("Unable to find config file ", *local_iplist)
 			}
-			servers, num_cycles, exp_time = ParseYAMLConfig(*local_iplist)
+			servers, num_cycles, exp_time, lock_servers = ParseYAMLConfig(*local_iplist)
 		} else {
 			log.Fatal("Remote server list not yet supported. Please provide a local config file.")
 		}
@@ -686,7 +697,7 @@ func main() {
 					continue
 				}
 				log.WithFields(log.Fields{"ip": ip}).Info(fmt.Sprintf("Contacting Server %d/%d ", count, len(servers)))
-				sendTime, new_place, num_finished = runExperimentOnMachine(ip, algs, num_cycles, place, total_experiments, *should_resume, exp_time)
+				sendTime, new_place, num_finished = runExperimentOnMachine(ip, algs, num_cycles, place, total_experiments, *should_resume, exp_time, lock_servers)
 				if num_finished > 0 {
 					num_servers_contacted += 1
 				}
@@ -717,6 +728,8 @@ func main() {
 				log.Info(result)
 				count++
 			}
+		} else {
+			log.Warn("All servers are currently locked or unreachable. If they are unreachable, please check your network connectivity. If they are all locked, please try running the test again at a later time. Thank you!")
 		}
 		// delete all the files
 		for _, d := range servers {

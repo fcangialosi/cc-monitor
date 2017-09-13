@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -20,9 +21,12 @@ import (
 
 var sendBuf []byte = make([]byte, config.TCP_TRANSFER_SIZE)
 var rng *rand.Rand
+var server_locked bool
+var mu sync.Mutex
 
 func init() {
 	rng = rand.New(rand.NewSource(time.Now().UnixNano()))
+	server_locked = false
 }
 
 func checkErrMsg(err error, message string) {
@@ -219,11 +223,25 @@ func handleRequestTCP(conn *net.TCPConn) {
 
 	log.WithFields(log.Fields{"client": clientIPPort, "req": string(reqBuf[:n]), "now": time.Now()}).Info("New measurement requested")
 
-	reqTime := strings.SplitN(string(reqBuf[:n]), " ", 3)
+	reqTime := strings.SplitN(string(reqBuf[:n]), " ", 4)
 	curTime := reqTime[0]
-	alg := reqTime[1]
-	params := reqTime[2]
+	lock_servers := reqTime[1] == "true"
+	alg := reqTime[2]
+	params := reqTime[3]
 	parsed_params := parseAlgParams(params)
+
+	mu.Lock()
+	if server_locked {
+		mu.Unlock()
+		log.Warn("Server locked. Denying request...")
+		conn.Write([]byte(config.SERVER_LOCKED))
+		return
+	}
+	if lock_servers {
+		log.Warn("Client request for server lock granted.")
+		server_locked = true
+	}
+	mu.Unlock()
 
 	on_time := time.Millisecond * config.MEAN_ON_TIME_MS
 	if manual_exp_time, ok := parsed_params["exp_time"]; ok {
