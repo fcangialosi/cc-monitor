@@ -2,9 +2,7 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/binary"
-	"encoding/gob"
 	"flag"
 	"fmt"
 	"io"
@@ -557,27 +555,16 @@ func PullConfigFromServer() (shared.ServerList, int, time.Duration, bool) {
 		log.Fatal("Error contacting config server: ", err)
 	}
 	defer conn.Close()
-	ack_buf := []byte("ack")
 	recv_buf := make([]byte, config.LARGE_BUF_SIZE)
 
-	conn.Write(ack_buf)
-
 	n, err := conn.Read(recv_buf)
-	if err != nil {
+	if err != nil || n < 1 {
 		log.Fatal("Error receiving config from server: ", err)
 	}
 
-	config := shared.YAMLConfig{}
-	r := bytes.NewBuffer(recv_buf[:n])
-	if recv_buf == nil || n < 1 {
-		log.Fatal("Error decoding config file pulled from server")
-	}
-	d := gob.NewDecoder(r)
-	d.Decode(&config.Num_cycles)
-	d.Decode(&config.Exp_time)
-	d.Decode(&config.Lock_servers)
-	d.Decode(&config.Servers)
+	config := shared.DecodeConfig(recv_buf[:n])
 	exp_time, err := time.ParseDuration(config.Exp_time)
+	log.Info(config)
 	if err != nil {
 		log.Fatal("Config contains invalid exp_time, expected format: [0-9]?(s|m|h)")
 	}
@@ -601,7 +588,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.4-c6"
+	version := "v1.4-c7"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()

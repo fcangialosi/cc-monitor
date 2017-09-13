@@ -68,7 +68,7 @@ func introServer(ip_file string) {
 		checkError(err)
 		go func(c *net.TCPConn) {
 			defer conn.Close()
-			config := shared.ParseYAMLConfig(ip_file)
+			config := shared.ReadYAMLConfig(ip_file)
 			log.Info("Sending config to client")
 			conn.Write(shared.EncodeConfig(config))
 		}(conn)
