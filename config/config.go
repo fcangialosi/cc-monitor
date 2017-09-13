@@ -11,6 +11,7 @@ const DB_TABLE_NAME = "cc_results"
 const DB_USERNAME = "user"
 const DB_PASSWORD = "password"
 const IP_LIST_LOCATION = "/home/ubuntu/ip.txt"
+const REMOTE_YAML_CONFIG = "/home/ubuntu/cc-monitor/remote-config.yaml"
 
 // HEADER
 const HEADER_SIZE = 32

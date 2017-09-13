@@ -67,11 +67,10 @@ func introServer(ip_file string) {
 		conn, err := server.AcceptTCP()
 		checkError(err)
 		go func(c *net.TCPConn) {
-			p := make([]byte, config.LARGE_BUF_SIZE)
 			defer conn.Close()
-			servers, num_cycles, exp_time, lock_servers := shared.ParseYAMLConfig(ip_file)
-			conn.Read(p)
-			conn.Write(shared.EncodeConfig(servers, num_cycles, exp_time, lock_servers))
+			config := shared.ParseYAMLConfig(ip_file)
+			log.Info("Sending config to client")
+			conn.Write(shared.EncodeConfig(config))
 		}(conn)
 	}
 
@@ -267,18 +266,9 @@ func checkErrMsg(err error, msg string) {
 func main() {
 	log.Info(currentDate())
 	log.Info(currentTime())
-	start := time.Now()
-
-	time.Sleep(time.Second * 2)
-	elapsed := time.Since(start)
-	elapsed_ms := elapsed.Seconds() * float64(time.Second/time.Millisecond)
-	log.WithFields(log.Fields{"elapsed": elapsed_ms}).Info("elapsed time")
-	// get the ip list for tests
-	ip_list, ip_order, num_cycles := results.GetIPList(config.IP_LIST_LOCATION)
-	log.WithFields(log.Fields{"num_cycles": num_cycles, "order": ip_order}).Info(ip_list)
 
 	quit := make(chan struct{})
-	go introServer(config.IP_LIST_LOCATION)
+	go introServer(config.REMOTE_YAML_CONFIG)
 	db_channel := make(chan results.CCResults)
 	go dbServer(db_channel)
 	go dbWorker(db_channel, config.IP_LIST_LOCATION)
