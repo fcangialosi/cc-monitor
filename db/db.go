@@ -12,6 +12,7 @@ import (
 
 	"../config"
 	"../results"
+	"../shared"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -68,10 +69,9 @@ func introServer(ip_file string) {
 		go func(c *net.TCPConn) {
 			p := make([]byte, config.LARGE_BUF_SIZE)
 			defer conn.Close()
-			ip_list, ip_order, num_cycles := results.GetIPList(ip_file)
-			// send it back to the server
+			servers, num_cycles, exp_time, lock_servers := shared.ParseYAMLConfig(ip_file)
 			conn.Read(p)
-			conn.Write(results.EncodeIPList(ip_list, ip_order, num_cycles))
+			conn.Write(shared.EncodeConfig(servers, num_cycles, exp_time, lock_servers))
 		}(conn)
 	}
 

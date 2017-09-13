@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/binary"
+	"encoding/gob"
 	"flag"
 	"fmt"
 	"io"
@@ -12,8 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"gopkg.in/yaml.v2"
 
 	"../config"
 	"../results"
@@ -403,31 +403,6 @@ func sendReport(report []byte) {
 	}
 }
 
-/*Contact the known DB server for a list of IPs to run the experiment at*/
-/*
-func getIPS() (results.IPList, []string, int) {
-	conn, err := net.DialTimeout("tcp", config.DB_IP+":"+config.IP_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
-	if CheckError(err) {
-		return make(results.IPList), make([]string, 0), 0
-	}
-	defer conn.Close()
-	ack_buf := []byte("ack")
-	recv_buf := make([]byte, config.LARGE_BUF_SIZE)
-
-	conn.Write(ack_buf)
-
-	// write ack, get back list of IPs
-	n, err := conn.Read(recv_buf)
-	if CheckError(err) {
-		return make(results.IPList), make([]string, 0), 0
-	}
-	ip_list, ip_order, num_cycles := results.DecodeIPList(recv_buf[:n])
-
-	return ip_list, ip_order, num_cycles
-
-}
-*/
-
 func getSendTimeLocalFile(localResultsStorage string) string { // if there is a localResults file, get the sendTime
 	bytes, err := ioutil.ReadFile(localResultsStorage)
 	if err != nil {
@@ -576,26 +551,32 @@ func getURLFromServer(gg results.GraphInfo) string {
 	return string(recvBuf[:n])
 }
 
-type ServerList []map[string][]string
-type YAMLConfig struct {
-	Num_cycles   int
-	Exp_time     string
-	Lock_servers bool
-	Servers      ServerList
-}
+func PullConfigFromServer() (shared.ServerList, int, time.Duration, bool) {
+	conn, err := net.DialTimeout("tcp", config.DB_IP+":"+config.IP_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
+	if err != nil {
+		log.Fatal("Error contacting config server: ", err)
+	}
+	defer conn.Close()
+	ack_buf := []byte("ack")
+	recv_buf := make([]byte, config.LARGE_BUF_SIZE)
 
-func ParseYAMLConfig(config_file string) (ServerList, int, time.Duration, bool) {
-	config := YAMLConfig{}
-	data, err := ioutil.ReadFile(config_file)
+	conn.Write(ack_buf)
+
+	n, err := conn.Read(recv_buf)
 	if err != nil {
-		log.Warn("Hint: make sure you're only using spaces, not tabs!")
-		log.Fatal("Error reading config file: ", err)
+		log.Fatal("Error receiving config from server: ", err)
 	}
-	err = yaml.Unmarshal(data, &config)
-	if err != nil {
-		log.Warn("Hint: make sure you're only using spaces, not tabs!")
-		log.Fatal("Error parsing config file: ", err)
+
+	config := shared.YAMLConfig{}
+	r := bytes.NewBuffer(recv_buf[:n])
+	if recv_buf == nil || n < 1 {
+		log.Fatal("Error decoding config file pulled from server")
 	}
+	d := gob.NewDecoder(r)
+	d.Decode(&config.Num_cycles)
+	d.Decode(&config.Exp_time)
+	d.Decode(&config.Lock_servers)
+	d.Decode(&config.Servers)
 	exp_time, err := time.ParseDuration(config.Exp_time)
 	if err != nil {
 		log.Fatal("Config contains invalid exp_time, expected format: [0-9]?(s|m|h)")
@@ -620,7 +601,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.4-c4"
+	version := "v1.4-c5"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
@@ -656,7 +637,7 @@ func main() {
 		num_cycles := 1
 		runExperimentOnMachine(mahimahi, algs, num_cycles, 0, len(algs)*num_cycles, false, 30*time.Second, false)
 	} else { // contact DB for files
-		var servers ServerList
+		var servers shared.ServerList
 		var num_cycles int
 		var exp_time time.Duration
 		var lock_servers bool
@@ -664,9 +645,9 @@ func main() {
 			if _, err := os.Stat(*local_iplist); os.IsNotExist(err) {
 				log.Fatal("Unable to find config file ", *local_iplist)
 			}
-			servers, num_cycles, exp_time, lock_servers = ParseYAMLConfig(*local_iplist)
+			servers, num_cycles, exp_time, lock_servers = shared.ParseYAMLConfig(*local_iplist)
 		} else {
-			log.Fatal("Remote server list not yet supported. Please provide a local config file.")
+			servers, num_cycles, exp_time, lock_servers = PullConfigFromServer()
 		}
 
 		sendMap := make(map[string]string) // maps IPs to times the report was sent
