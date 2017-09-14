@@ -242,6 +242,11 @@ func handleRequestTCP(conn *net.TCPConn) {
 		server_locked = true
 	}
 	mu.Unlock()
+	defer func() {
+		mu.Lock()
+		server_locked = false
+		mu.Unlock()
+	}()
 
 	on_time := time.Millisecond * config.MEAN_ON_TIME_MS
 	if manual_exp_time, ok := parsed_params["exp_time"]; ok {
