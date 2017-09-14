@@ -242,11 +242,6 @@ func handleRequestTCP(conn *net.TCPConn) {
 		server_locked = true
 	}
 	mu.Unlock()
-	defer func() {
-		mu.Lock()
-		server_locked = false
-		mu.Unlock()
-	}()
 
 	on_time := time.Millisecond * config.MEAN_ON_TIME_MS
 	if manual_exp_time, ok := parsed_params["exp_time"]; ok {
@@ -335,7 +330,11 @@ sendloop:
 			conn.Write(sendBuf)
 		}
 	}
-	log.Info("Done. Closing connection...")
+
+	log.Info("Releasing lock")
+	mu.Lock()
+	server_locked = false
+	mu.Unlock()
 
 	return
 }
@@ -472,7 +471,7 @@ func main() {
 	quit := make(chan struct{})
 
 	log.Info("Preparing TCP Probe")
-	shellCommand("sudo rmmod tcp_probe", true)
+	// shellCommand("sudo rmmod tcp_probe", true)
 	//	shellCommand("sudo modprobe tcp_probe full=1", true)
 	shellCommand("sudo modprobe tcp_probe port="+config.MEASURE_SERVER_PORT+" full=1", true)
 	shellCommand("sudo chmod 444 /proc/net/tcpprobe", true)
