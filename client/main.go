@@ -501,6 +501,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 			if !timed_out {
 				num_finished += 1
 			}
+			time.Sleep(time.Second * 3)
 
 			// write report so far into file
 		saveToFile:
@@ -587,7 +588,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.4-c9"
+	version := "v1.4-c10"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
