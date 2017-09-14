@@ -166,7 +166,7 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 			}
 
 			shellCommand(fmt.Sprintf("mv %s%s-%s/* %s/%s/", config.DB_SERVER_CCP_TMP, server_ip, client_ip, path, current_time), true)
-
+			log.WithFields(log.Fields{"LOCATION": graph_location, "full path": full_path, "title": graph_title, "directory": graph_directory}).Info("args to file transfer thing")
 			args := []string{full_path, graph_location, graph_title, graph_directory}
 			cmd := exec.Command(config.PATH_TO_GRAPH_SCRIPT, args...) // graphing scripts  moves the image to file with the python web server running
 			cmd.Stdout = os.Stdout
@@ -178,7 +178,8 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 			// now make the throughput graph for each of the algorithms
 			for alg, _ := range rep.Throughput {
 				log.Info("Alg is ", alg)
-				alg = strings.Split(alg, " ")[0]
+				alg_broken := strings.Split(alg, " ")
+				alg = strings.Join(alg_broken, ",")
 				// log for graphing script
 				title := fmt.Sprintf("%s_Throughput", alg)
 				thr_log := fmt.Sprintf("%s_%s", alg, graph_location)
