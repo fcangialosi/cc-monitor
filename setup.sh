@@ -30,6 +30,8 @@ echo "===> Loading necessary kernel modules (tcpprobe, tcp_bbr, tcp_vegas)..."
 sudo modprobe tcp_bbr
 # Load TCP Vegas
 sudo modprobe tcp_vegas
+# Load TCP Cubic
+sudo modprobe tcp_cubic
 # Load CCP
 cd /home/ubuntu/ccp-kernel/
 sudo insmod ccp.ko
@@ -38,8 +40,8 @@ cd -
 echo "===> Setting kernel params..."
 
 # expand the tcp receive buffer size
-sudo sysctl -w net.core.rmem_max=8388608
-sudo sysctl -w net.core.rmem_default=8388608
+#sudo sysctl -w net.core.rmem_max=8388608
+#sudo sysctl -w net.core.rmem_default=8388608
 
 # make bbr and vegas available to applications
 ALGS=`cat /proc/sys/net/ipv4/tcp_available_congestion_control`
@@ -48,7 +50,7 @@ echo $ALGS > /proc/sys/net/ipv4/tcp_allowed_congestion_control
 echo "===> Enabling fq qdisc..."
 # enable fq, which is necessary for bbr pacing to work correctly
 sudo sysctl -w net.core.default_qdisc=fq
-sudo tc qdisc replace dev eth0 root fq
+sudo tc qdisc replace dev $1 root fq
 
 echo "===> Creating directories..."
 mkdir -p /home/ubuntu/cc-monitor/probes
