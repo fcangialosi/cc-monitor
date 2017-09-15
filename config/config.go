@@ -1,5 +1,6 @@
 package config
 
+const HOME = "/home/ubuntu/"
 // conversion
 const BYTES_TO_MBITS = .000008
 
@@ -66,8 +67,9 @@ const START = "START"
 const END = "END"
 const TRAIN_LENGTH = 8
 
-const PATH_TO_CCP = "/home/ubuntu/ccp/ccpl"
-const PATH_TO_PRIV_KEY = "/home/ubuntu/.ssh/rach.pem"
+const PATH_TO_CCP = HOME + "ccp/ccpl"
+const PATH_TO_PRIV_KEY = HOME + ".ssh/rach.pem"
+
 const DB_SERVER = "ubuntu@34.230.33.142"
 const DB_SERVER_CCP_TMP = "/home/ubuntu/exp_results/ccp_tmp/"
 

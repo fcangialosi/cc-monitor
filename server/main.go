@@ -144,7 +144,7 @@ func handleSRTTRequest(conn *net.TCPConn) {
 	clientPort := strings.Split(timePort, "->")[1]
 
 	// filename = IP_time_tcpprobe.log
-	tcpprobeInfo := fmt.Sprintf("/home/ubuntu/cc-monitor/probes/%s_%s_tcpprobe.log", clientIP, curTime)
+	tcpprobeInfo := fmt.Sprintf(config.HOME + "cc-monitor/probes/%s_%s_tcpprobe.log", clientIP, curTime)
 
 	// manually PARSE the file for the srtt info and get an array of RTTs
 	// open the tcpprobe file line by line and read it
@@ -262,7 +262,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 	// Start CCP process in the background
 	if alg[:3] == "ccp" {
 		ccname = "ccp"
-		logname := fmt.Sprintf("/home/ubuntu/cc-monitor/ccp_logs/%s_%s_%s.log", alg, strings.Replace(params, " ", "_", -1), currentTime())
+		logname := fmt.Sprintf(config.HOME + "cc-monitor/ccp_logs/%s_%s_%s.log", alg, strings.Replace(params, " ", "_", -1), currentTime())
 		args := []string{
 			config.PATH_TO_CCP,
 			"--datapath=kernel",
@@ -305,15 +305,10 @@ func handleRequestTCP(conn *net.TCPConn) {
 	// NOTE: for mahimahi, grepping for client port will result in lines both from server -> NAT and NAT -> client
 	// we would want NAT -> client lines -> so hack, just check for "ffff"
 	parseString := clientPort
-	probeLog := fmt.Sprintf("/home/ubuntu/cc-monitor/probes/%s_%s_tcpprobe.log", clientIP, curTime)
+	probeLog := fmt.Sprintf(config.HOME + "cc-monitor/probes/%s_%s_tcpprobe.log", clientIP, curTime)
 	// probe := shellCommand("cat /proc/net/tcpprobe | grep "+parseString+" > "+probeLog, false)
 	probe := shellCommand("dd if=/proc/net/tcpprobe ibs=128 obs=128 | grep "+parseString+" > "+probeLog, false)
-	/*
-		probe := exec.Command("/bin/bash", "/home/ubuntu/cc-monitor/start_tcp_probe.sh", parseString, probeLog)
-		if err := probe.Start(); err != nil {
-			log.WithFields(log.Fields{"err": err}).Error("Error starting tcpprobe")
-		}
-	*/
+
 	defer func() {
 		if err := probe.Process.Kill(); err != nil {
 			log.Warn("error stopping probe")
