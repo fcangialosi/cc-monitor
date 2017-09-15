@@ -23,6 +23,35 @@ func ParseAlgParams(line string) (params map[string]string) {
 	return
 }
 
+func FriendlyAlgString(line string) string {
+	algName := strings.Split(line, " ")[0]
+	if algName != "ccp-nimbus" {
+		return algName
+	}
+	params := ParseAlgParams(line)
+	useSwitching := false
+	if val, ok := params["useSwitching"]; ok {
+		if val == "true" {
+			useSwitching = true
+		}
+	}
+	flowMode := ""
+	if val, ok := params["flowMode"]; ok {
+		flowMode = val
+	}
+
+	if useSwitching {
+		return "nimbus"
+	} else if !(useSwitching) && flowMode == "DELAY" {
+		return "nimbus_delay"
+	} else if !(useSwitching) && flowMode == "XTCP" {
+		return "nimbus_tcpcomp"
+	} else {
+		return "nimbus"
+	}
+
+}
+
 func ParseAlg(line string) (string, string) {
 	sp := strings.Split(line, "/")
 	return sp[0], sp[1]

@@ -1,6 +1,6 @@
 all: cc-client cc-server db-server reader
 
-cc-client: client/*.go config/*.go results/*.go
+cc-client: client/*.go config/*.go results/*.go shared/*.go
 	go build -o ./cc-client ./client/
 
 cc-server: server/*.go config/*.go results/*.go

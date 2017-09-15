@@ -16,6 +16,7 @@ import (
 	"../config"
 	"../results"
 	"../shared"
+	color "github.com/fatih/color"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -173,14 +174,29 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 		fullDelay += del
 		count++
 	}
-	log.WithFields(log.Fields{
+	//BLUE := "\u001B[34m"
+	//RED := "\u001B[31m"
+	// ************ RESULTS ****
+	tput_mbps := color.BlueString(fmt.Sprintf("%0.1f", singleThroughputMeasurement(flow_throughputs[bytes_received], bytes_received)))
+	delay_ms := color.RedString(fmt.Sprintf("%d", int(fullDelay/count)))
+	elapsed := fmt.Sprintf("%0.1f", elapsed(start)/1000)
+	proto := color.GreenString(shared.FriendlyAlgString(alg))
+	algParams := shared.ParseAlgParams(alg)
+	expTime := ""
+	if val, ok := algParams["exp_time"]; ok {
+		expTime = val[:(len(val) - 1)]
+	}
+	output := fmt.Sprintf("proto:%s, tput_mbps: %s, delay_ms: %s, elapsed_s: %s, exptime_s: %s", proto, tput_mbps, delay_ms, elapsed, expTime)
+	fmt.Println(output)
+	//fmt.Println("proto:%s,tput_mbps:%s%.1f,delay_ms:%s%d,elapsed:%.1f", alg, BLUE, tput_mbps, RED, delay_ms, elapsed)
+	/*log.WithFields(log.Fields{
 		"trial":                 cycle + 1,
 		"bytes_received":        fmt.Sprintf("%.3f MBytes", float64(bytes_received)/1000000.0),
 		"last_received_data_at": time.Duration(flow_throughputs[bytes_received]) * time.Millisecond,
 		"time_elapsed":          elapsed(start) / 1000,
 		"throughput":            fmt.Sprintf("%.3f Mbit/sec", singleThroughputMeasurement(flow_throughputs[bytes_received], bytes_received)),
 		"avg_delay":             fmt.Sprintf("%.3f ms", fullDelay/count),
-	}).Info("Finished Trial")
+	}).Info("Finished Trial")*/
 
 	flow_times[config.END] = last_received_time
 
@@ -602,7 +618,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.4-c42"
+	version := "v1.4-c52"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
