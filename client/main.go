@@ -87,7 +87,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	n, err := conn.Read(recvBuf)
 	resp := string(recvBuf[:n])
 	if resp == config.SERVER_LOCKED {
-		log.Warn("Server currently locked for another experiment. Will try again in %d seconds.", config.RETRY_WAIT)
+		log.Warn(fmt.Sprintf("Server currently locked for another experiment. Will try again in %d seconds.", config.RETRY_WAIT))
 		return flow_throughputs, flow_times, delay, false, true
 	}
 	if resp != config.START_FLOW {
@@ -602,7 +602,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.4-c32"
+	version := "v1.4-c42"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
