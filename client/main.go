@@ -464,7 +464,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 	cycle := 0
 	this_exp_time := exp_time
 	timed_out := false
-	locked := false
+	locked := true
 	num_finished := 0
 	retries := 0
 	for cycle < num_cycles {
@@ -495,6 +495,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 			}
 
 			timed_out = false
+			locked = true
 			retries = 0
 			for !timed_out && locked && retries < config.LOCKED_RETRIES {
 				if proto == "tcp" {
@@ -502,8 +503,8 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 				} else if proto == "udp" {
 					timed_out, locked = runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, 1, cycle, this_exp_time, lock_servers)
 				} else {
-					log.Error("Unknown protocol!")
-					timed_out = true
+					log.Warn("Unknown protocol! Skipping...")
+					break
 				}
 				retries += 1
 				time.Sleep(time.Second * config.RETRY_WAIT)
@@ -598,7 +599,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.4-c12"
+	version := "v1.4-c22"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
