@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -179,14 +180,17 @@ func handleSRTTRequest(conn *net.TCPConn) {
 		line := scanner.Text()
 		brokenLine := strings.Split(line, " ")
 		if len(brokenLine) < 10 {
+			log.Warn("not enough lines")
 			continue
 		}
 		if !(strings.Contains(line, "ffff")) { // to be able to parse for mahimahi correctly
+			log.Warn("no ffff")
 			continue
 		}
 		// check client port is in the RCV field, as it could show up in the timestamp field
 		rcvField := brokenLine[2]
 		if !(strings.Contains(rcvField, clientPort)) {
+			log.Warn("no client port")
 			continue
 		}
 		timestamp, _ := strconv.ParseFloat(brokenLine[0], 64)
@@ -295,34 +299,18 @@ func handleRequestTCP(conn *net.TCPConn) {
 		ccname = alg
 	}
 	syscall.SetsockoptString(int(file.Fd()), syscall.IPPROTO_TCP, config.TCP_CONGESTION, ccname)
-	conn.SetWriteBuffer(8388608)
-	conn.SetReadBuffer(8388608)
 
 	conn.Write(startBuf)
 	buf := make([]byte, config.ACK_LEN)
 	conn.Read(buf) // wait for ack back
 
-	// NOTE: for mahimahi, grepping for client port will result in lines both from server -> NAT and NAT -> client
+	// NOTE: for mahimahi, grepping for client port will result in lines from server -> NAT and NAT -> client
 	// we would want NAT -> client lines -> so hack, just check for "ffff"
 	parseString := clientPort
 	probeLog := fmt.Sprintf(config.HOME+"cc-monitor/probes/%s_%s_tcpprobe.log", clientIP, curTime)
-	allprobeOutput := fmt.Sprintf(config.HOME+"cc-monitor/probes/%s_%s_allprobe.log", clientIP, curTime)
-	// probe := shellCommand("cat /proc/net/tcpprobe | grep "+parseString+" > "+probeLog, false)
-	// dd all the probe output to some file and then grep that file later (?)
-	probe := shellCommand("dd if=/proc/net/tcpprobe ibs=128 obs=128 of="+allprobeOutput, false)
-	//probe := shellCommand("dd if=/proc/net/tcpprobe ibs=128 obs=128 of= | grep "+parseString+" > "+probeLog, false)
-
-	defer func() {
-		if err := probe.Process.Kill(); err != nil {
-			log.Warn("error stopping probe")
-			return
-		}
-		// now try to run the grep
-
-		shellCommand(fmt.Sprintf("cat %s | grep %s > %s", allprobeOutput, parseString, probeLog), true)
-		os.Remove(allprobeOutput)
-		log.Info("Probe killed")
-	}()
+	probeKillCh := make(chan bool)
+	go runTCPProbe(probeKillCh, parseString, probeLog)
+	defer func() { probeKillCh <- true }()
 
 	on_timer := time.After(on_time)
 sendloop:
@@ -467,6 +455,39 @@ func shellCommand(cmd string, wait bool) *exec.Cmd {
 		}
 	}
 	return proc
+}
+
+func runTCPProbe(killCh chan bool, port string, outfile string) {
+	rx := regexp.MustCompile(port)
+
+	f, err := os.Open("/proc/net/tcpprobe")
+	if err != nil {
+		log.WithFields(log.Fields{"err": err}).Error("Error creating tcpprobe log file")
+		return
+	}
+	defer f.Close()
+	out, err := os.Create(outfile)
+	if err != nil {
+		log.WithFields(log.Fields{"err": err}).Error("Error creating tcpprobe log file")
+		return
+	}
+
+	buf := make([]byte, 128)
+	for {
+		select {
+		case <-killCh:
+			return
+		default:
+			n, err := f.Read(buf)
+			if err != nil {
+				log.WithFields(log.Fields{"err": err}).Warn("Error reading from TCP probe")
+				return
+			}
+			if rx.Match(buf) {
+				out.Write(buf[:n])
+			}
+		}
+	}
 }
 
 var my_public_ip string
