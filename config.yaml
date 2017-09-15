@@ -1,14 +1,14 @@
 # Global Paramaters
 num_cycles: 1
-exp_time: 5m # accepts int number of (s)econds or (m)inutes
+exp_time: 1m # accepts int number of (s)econds or (m)inutes
 lock_servers: true
 
 # Default algorithms to use for each server if not specified 
 default: &default
-  - tcp/ccp-nimbus useSwitching=true bwEstMode=true
   - tcp/cubic
-  - tcp/vegas
   - tcp/ccp-nimbus useSwitching=false bwEstMode=true flowMode=XTCP
+  - tcp/ccp-nimbus useSwitching=true bwEstMode=true
+  - tcp/vegas
   - tcp/ccp-nimbus useSwitching=false bwEstMode=true flowMode=DELAY
 
 # Algorithms to run on each server (leave blank for default)
@@ -16,9 +16,8 @@ default: &default
 # (exp_time can be provided as a key to override global)
 
 servers:
-  - 52.53.245.164: *default  # AWS California
-  - 35.176.170.65: *default  # AWS London
-  #- 13.56.224.25:  *default  # AWS Mumbai
+  - 128.30.76.144: *default # NIMBUS2000
+    #- 54.67.124.83: *default  # AWS California
 
 # Available algorithms and parameters
 # 

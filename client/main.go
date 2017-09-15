@@ -48,7 +48,7 @@ func measureThroughput(start time.Time, bytes_received uint32, m results.BytesTi
 }
 
 /*Record TCP throughput*/
-func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool) {
+func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool, bool) {
 	flow_throughputs := results.BytesTimeMap{}
 	flow_times := results.OnOffMap{}
 	delay := results.TimeRTTMap{}
@@ -68,7 +68,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	gen_conn, err := net.DialTimeout("tcp", server_ip+":"+config.MEASURE_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
 	if CheckErrMsg(err, "tcp connection to server") {
 		time.Sleep(2 * time.Second)
-		return flow_throughputs, flow_times, delay, true
+		return flow_throughputs, flow_times, delay, true, false
 	}
 
 	var conn *net.TCPConn
@@ -88,11 +88,11 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	resp := string(recvBuf[:n])
 	if resp == config.SERVER_LOCKED {
 		log.Warn("Server currently locked for another experiment. Skipping...")
-		return flow_throughputs, flow_times, delay, true
+		return flow_throughputs, flow_times, delay, true, true
 	}
 	if resp != config.START_FLOW {
 		log.Error("Did not receive start from server")
-		return flow_throughputs, flow_times, delay, true
+		return flow_throughputs, flow_times, delay, true, false
 	}
 
 	log.Info("Connection established.")
@@ -103,7 +103,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	conn.Write([]byte(config.ACK))
 	if CheckErrMsg(err, "opening TCP connection") {
 		time.Sleep(2 * time.Second)
-		return flow_throughputs, flow_times, delay, true
+		return flow_throughputs, flow_times, delay, true, false
 	}
 
 	// set first deadline for 30 seconds, then 30 seconds after
@@ -149,7 +149,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	conn2, err := net.DialTimeout("tcp", server_ip+":"+config.SRTT_INFO_PORT, config.CONNECT_TIMEOUT*time.Second)
 	if CheckErrMsg(err, "tcp connection to server") {
 		time.Sleep(2 * time.Second)
-		return flow_throughputs, flow_times, delay, true
+		return flow_throughputs, flow_times, delay, true, false
 	}
 	// else get the delay estimates from server
 	infoBuf := make([]byte, 0)
@@ -184,11 +184,11 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 
 	flow_times[config.END] = last_received_time
 
-	return flow_throughputs, flow_times, delay, false
+	return flow_throughputs, flow_times, delay, false, false
 
 }
 
-func measureUDP(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool) {
+func measureUDP(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool, bool) {
 	timed_out := false
 	flow_throughputs := results.BytesTimeMap{}
 	flow_times := results.OnOffMap{}
@@ -212,7 +212,7 @@ func measureUDP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	conn, err := net.DialTimeout("tcp", server_ip+":"+config.OPEN_UDP_PORT, config.CONNECT_TIMEOUT*time.Second)
 	if CheckErrMsg(err, "Open TCP connection to get genericCC port number") {
 		time.Sleep(2 * time.Second)
-		return flow_throughputs, flow_times, timeRTTMap, true
+		return flow_throughputs, flow_times, timeRTTMap, true, false
 	}
 
 	defer conn.Close()
@@ -225,26 +225,26 @@ func measureUDP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	n, err := conn.Read(recvBuf)
 	if CheckErrMsg(err, "Trying to receive port number from genericCC") {
 		time.Sleep(2 * time.Second)
-		return flow_throughputs, flow_times, timeRTTMap, true
+		return flow_throughputs, flow_times, timeRTTMap, true, false
 	}
 	gccPort := string(recvBuf[:n])
 	//log.WithFields(log.Fields{"port": gccPort}).Info("Received port number genericCC will be running on")
 
 	laddr, err := net.ResolveUDPAddr("udp", ":"+srcport) // listen at a known port for later udp messages
 	if CheckErrMsg(err, "creating laddr") {
-		return flow_throughputs, flow_times, timeRTTMap, true
+		return flow_throughputs, flow_times, timeRTTMap, true, false
 	}
 
 	receiver, err := net.ListenUDP("udp", laddr)
 	if CheckErrMsg(err, "error on creating receiver for listen UDP") {
-		return flow_throughputs, flow_times, timeRTTMap, true
+		return flow_throughputs, flow_times, timeRTTMap, true, false
 	}
 	defer receiver.Close()
 
 	// start listening for genericCC
 	gccAddr, err := net.ResolveUDPAddr("udp", server_ip+":"+gccPort)
 	if CheckErrMsg(err, "resolving addr to generic CC port given") {
-		return flow_throughputs, flow_times, timeRTTMap, true
+		return flow_throughputs, flow_times, timeRTTMap, true, false
 	}
 
 	// have a go function now that listens on this for the loss rate and RTT Info from the connection
@@ -284,11 +284,11 @@ func measureUDP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 					log.Warn("timeout, trying to initiate again...")
 					continue
 				} else {
-					return flow_throughputs, flow_times, timeRTTMap, true
+					return flow_throughputs, flow_times, timeRTTMap, true, false
 				}
 			} else {
 				log.Info("Error when punching NAT: ", err)
-				return flow_throughputs, flow_times, timeRTTMap, true
+				return flow_throughputs, flow_times, timeRTTMap, true, false
 			}
 
 		}
@@ -359,23 +359,24 @@ func measureUDP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	}).Info("Finished Trial")
 
 	flow_times[config.END] = last_received_time
-	return flow_throughputs, flow_times, timeRTTMap, timed_out
+	return flow_throughputs, flow_times, timeRTTMap, timed_out, false
 }
 
-func runExperiment(f func(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool), IP string, alg string, report *results.CCResults, protocol string, port string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool) bool {
+func runExperiment(f func(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool, bool), IP string, alg string, report *results.CCResults, protocol string, port string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool) (bool, bool) {
 	throughput := make(results.BytesTimeMap)
 	flow_times := make(results.OnOffMap)
 	time_map := make(results.TimeRTTMap)
 	timed_out := false
+	locked := false
 
-	throughput, flow_times, time_map, timed_out = f(IP, alg, num_cycles, cycle, exp_time, lock_servers)
+	throughput, flow_times, time_map, timed_out, locked = f(IP, alg, num_cycles, cycle, exp_time, lock_servers)
 
 	if !timed_out {
 		report.Throughput[alg][cycle] = throughput
 		report.FlowTimes[alg][cycle] = flow_times
 		report.Delay[alg][cycle] = time_map
 	}
-	return timed_out
+	return timed_out, locked
 
 }
 
@@ -462,8 +463,10 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 	// have loop for cycles here
 	cycle := 0
 	this_exp_time := exp_time
-	timed_out := true
+	timed_out := false
+	locked := false
 	num_finished := 0
+	retries := 0
 	for cycle < num_cycles {
 		// loop through each algorithm
 		for _, alg_line := range algs {
@@ -491,12 +494,19 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 				}
 			}
 
-			if proto == "tcp" {
-				timed_out = runExperiment(measureTCP, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, 1, cycle, this_exp_time, lock_servers)
-			} else if proto == "udp" {
-				timed_out = runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, 1, cycle, this_exp_time, lock_servers)
-			} else {
-				log.Error("Unknown protocol!")
+			timed_out = false
+			retries = 0
+			for !timed_out && locked && retries < config.LOCKED_RETRIES {
+				if proto == "tcp" {
+					timed_out, locked = runExperiment(measureTCP, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, 1, cycle, this_exp_time, lock_servers)
+				} else if proto == "udp" {
+					timed_out, locked = runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, 1, cycle, this_exp_time, lock_servers)
+				} else {
+					log.Error("Unknown protocol!")
+					timed_out = true
+				}
+				retries += 1
+				time.Sleep(time.Second * config.RETRY_WAIT)
 			}
 			if !timed_out {
 				num_finished += 1
