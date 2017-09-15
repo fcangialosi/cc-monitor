@@ -478,7 +478,7 @@ func runTCPProbe(killCh chan bool, port string, outfile string) {
 		return
 	}
 
-	buf := make([]byte, 128)
+	buf := make([]byte, 512)
 	for {
 		select {
 		case <-killCh:
