@@ -306,7 +306,8 @@ func handleRequestTCP(conn *net.TCPConn) {
 	// we would want NAT -> client lines -> so hack, just check for "ffff"
 	parseString := clientPort
 	probeLog := fmt.Sprintf("/home/ubuntu/cc-monitor/probes/%s_%s_tcpprobe.log", clientIP, curTime)
-	probe := shellCommand("cat /proc/net/tcpprobe | grep "+parseString+" > "+probeLog, false)
+	// probe := shellCommand("cat /proc/net/tcpprobe | grep "+parseString+" > "+probeLog, false)
+	probe := shellCommand("dd if=/proc/net/tcpprobe ibs=128 obs=128 | grep "+parseString+" > "+probeLog, false)
 	/*
 		probe := exec.Command("/bin/bash", "/home/ubuntu/cc-monitor/start_tcp_probe.sh", parseString, probeLog)
 		if err := probe.Start(); err != nil {
