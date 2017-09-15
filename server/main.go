@@ -144,7 +144,7 @@ func handleSRTTRequest(conn *net.TCPConn) {
 	clientPort := strings.Split(timePort, "->")[1]
 
 	// filename = IP_time_tcpprobe.log
-	tcpprobeInfo := fmt.Sprintf(config.HOME + "cc-monitor/probes/%s_%s_tcpprobe.log", clientIP, curTime)
+	tcpprobeInfo := fmt.Sprintf(config.HOME+"cc-monitor/probes/%s_%s_tcpprobe.log", clientIP, curTime)
 
 	// manually PARSE the file for the srtt info and get an array of RTTs
 	// open the tcpprobe file line by line and read it
@@ -262,7 +262,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 	// Start CCP process in the background
 	if alg[:3] == "ccp" {
 		ccname = "ccp"
-		logname := fmt.Sprintf(config.HOME + "cc-monitor/ccp_logs/%s_%s_%s.log", alg, strings.Replace(params, " ", "_", -1), currentTime())
+		logname := fmt.Sprintf(config.HOME+"cc-monitor/ccp_logs/%s_%s_%s.log", alg, strings.Replace(params, " ", "_", -1), currentTime())
 		args := []string{
 			config.PATH_TO_CCP,
 			"--datapath=kernel",
@@ -305,14 +305,22 @@ func handleRequestTCP(conn *net.TCPConn) {
 	// NOTE: for mahimahi, grepping for client port will result in lines both from server -> NAT and NAT -> client
 	// we would want NAT -> client lines -> so hack, just check for "ffff"
 	parseString := clientPort
-	probeLog := fmt.Sprintf(config.HOME + "cc-monitor/probes/%s_%s_tcpprobe.log", clientIP, curTime)
+	probeLog := fmt.Sprintf(config.HOME+"cc-monitor/probes/%s_%s_tcpprobe.log", clientIP, curTime)
+	allprobeOutput := fmt.Sprintf(config.HOME+"cc-monitor/probes/%s_%s_allprobe.log", clientIP, curTime)
 	// probe := shellCommand("cat /proc/net/tcpprobe | grep "+parseString+" > "+probeLog, false)
-	probe := shellCommand("dd if=/proc/net/tcpprobe ibs=128 obs=128 | grep "+parseString+" > "+probeLog, false)
+	// dd all the probe output to some file and then grep that file later (?)
+	probe := shellCommand("dd if=/proc/net/tcpprobe ibs=128 obs=128 of="+allprobeOutput, false)
+	//probe := shellCommand("dd if=/proc/net/tcpprobe ibs=128 obs=128 of= | grep "+parseString+" > "+probeLog, false)
 
 	defer func() {
 		if err := probe.Process.Kill(); err != nil {
 			log.Warn("error stopping probe")
+			return
 		}
+		// now try to run the grep
+
+		shellCommand(fmt.Sprintf("cat %s | grep %s > %s", allprobeOutput, parseString, probeLog), true)
+		os.Remove(allprobeOutput)
 		log.Info("Probe killed")
 	}()
 
