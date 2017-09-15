@@ -103,6 +103,14 @@ func createThroughputDelayLogs(cc *results.CCResults, outfile string) {
 		w := bufio.NewWriter(algfile_fd)
 		_, err = fmt.Fprintf(w, "count,time,throughput,flow\n")
 		// write header, then parse dictionary and write that out
+
+		bandwidthAlgFile := fmt.Sprintf("%s_%s_bandwidth.csv", alg, outfile)
+		bandwidthAlgFileFD, err := os.Create(bandwidthAlgFile)
+		checkErrMsg(err, "Opening bandwidth csv algfile for writing")
+		defer bandwidthAlgFileFD.Close()
+
+		bandW := bufio.NewWriter(bandwidthAlgFileFD)
+		fmt.Fprintf(bandW, "time,bandwidth,flow\n")
 		count := 1
 		for flow, flow_thr := range thr {
 			bytes := make([]uint32, 0)
@@ -127,12 +135,15 @@ func createThroughputDelayLogs(cc *results.CCResults, outfile string) {
 					fmt.Fprintf(inst_w, "%d,%g,%g,%s\n", count, file_time/1000, inst_throughput, flow_str)
 				}
 				thr_measurement := float32(bytes_rec) * float32(config.BYTES_TO_MBITS) / (float32(file_time) / 1000) // convert back to ms
+				bandwidthMeasurement := float32(bytes_rec) * float32(config.BYTES_TO_MBITS)
 				fmt.Fprintf(w, "%d,%g,%g,%s\n", count, file_time/1000, thr_measurement, flow_str)
+				fmt.Fprintf(bandW, "%d,%g,%g,%s\n", count, file_time/1000, bandwidthMeasurement, flow_str)
 				count++
 			}
 		}
 		w.Flush()
 		inst_w.Flush()
+		bandW.Flush()
 	}
 	for alg, alg_onoff := range cc.FlowTimes {
 		// do the delay log file
