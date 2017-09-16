@@ -184,9 +184,9 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	algParams := shared.ParseAlgParams(alg)
 	expTime := ""
 	if val, ok := algParams["exp_time"]; ok {
-		expTime = val[:(len(val) - 1)]
+		expTime = val
 	}
-	output := fmt.Sprintf("proto:%s, tput_mbps: %s, delay_ms: %s, elapsed_s: %s, exptime_s: %s", proto, tput_mbps, delay_ms, elapsed, expTime)
+	output := fmt.Sprintf("proto:%s, tput_mbps: %s, delay_ms: %s, elapsed_s: %s, exptime: %s", proto, tput_mbps, delay_ms, elapsed, expTime)
 	fmt.Println(output)
 	//fmt.Println("proto:%s,tput_mbps:%s%.1f,delay_ms:%s%d,elapsed:%.1f", alg, BLUE, tput_mbps, RED, delay_ms, elapsed)
 	/*log.WithFields(log.Fields{
@@ -543,7 +543,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 		cycle++
 	}
 
-	sendTime := currentTime()
+	sendTime := sendTimeStr()
 	report.SendTime = sendTime
 	if num_finished > 0 {
 		sendReport(results.EncodeCCResults(&report))
@@ -555,6 +555,9 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 	return sendTime, place, num_finished
 }
 
+func sendTimeStr() string {
+	return time.Now().UTC().Format("20060102150405")
+}
 func currentTime() string {
 	hour, min, sec := time.Now().UTC().Clock()
 	return fmt.Sprintf("%d.%d.%d", hour, min, sec)
