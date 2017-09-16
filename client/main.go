@@ -17,6 +17,7 @@ import (
 	"../results"
 	"../shared"
 	color "github.com/fatih/color"
+	"github.com/fcangialosi/uiprogress"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -49,7 +50,7 @@ func measureThroughput(start time.Time, bytes_received uint32, m results.BytesTi
 }
 
 /*Record TCP throughput*/
-func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool, bool) {
+func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool, progress_string string) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool, bool) {
 	flow_throughputs := results.BytesTimeMap{}
 	flow_times := results.OnOffMap{}
 	delay := results.TimeRTTMap{}
@@ -96,7 +97,8 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 		return flow_throughputs, flow_times, delay, true, false
 	}
 
-	log.Info("Connection established.")
+	// log.Info("Connection established.")
+	fmt.Printf("Connection established.")
 
 	// now start the timer
 	start := time.Now() // start of flow is when client sends first message to send back data
@@ -107,27 +109,20 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 		return flow_throughputs, flow_times, delay, true, false
 	}
 
-	// set first deadline for 30 seconds, then 30 seconds after
 	started_flow := false
-	dline := time.Now().Add(config.CLIENT_TIMEOUT * time.Second)
-	conn.SetReadDeadline(dline)
 	localPort := strings.Split(conn.LocalAddr().String(), ":")[1]
 
-	/*
-		err = conn.SetReadBuffer(8388608)
-		CheckErrMsg(err, "set read buffer")
-		err = conn.SetWriteBuffer(8388608)
-		CheckErrMsg(err, "set write buffer")
-	*/
+	// set first deadline for 30 seconds, then 30 seconds after
+	dline := time.Now().Add(config.CLIENT_TIMEOUT * time.Second)
+	conn.SetReadDeadline(dline)
+
+	progress := uiprogress.New()
+	progress.SetRefreshInterval(time.Millisecond * 500)
+	var bar *uiprogress.Bar
 
 	for {
-		//log.Info("Waiting to read")
-
 		n, err := conn.Read(recvBuf)
-		//log.Info("read")
-
 		if err == io.EOF || n <= 0 {
-			//log.Warn("Server closed connection")
 			break
 		} else if err, ok := err.(net.Error); ok && err.Timeout() {
 			log.Warn("timeout")
@@ -140,13 +135,21 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 			started_flow = true
 			dline := time.Now().Add(exp_time)
 			conn.SetReadDeadline(dline)
+			fmt.Printf("\r")
+			bar = progress.AddBar(dline, int(exp_time/time.Millisecond))
+			bar.PrependSecRemaining()
+			bar.PrependString(progress_string)
+			bar.AppendOtherBytes()
+			progress.Start()
 		}
 
 		bytes_received += uint32(n)
 		last_received_time = elapsed(original_start)
+		bar.Set(int(last_received_time), int(bytes_received))
 		measureThroughput(start, bytes_received, flow_throughputs)
-
 	}
+	progress.Stop()
+	fmt.Printf("Retrieving rtts from server...")
 	conn2, err := net.DialTimeout("tcp", server_ip+":"+config.SRTT_INFO_PORT, config.CONNECT_TIMEOUT*time.Second)
 	if CheckErrMsg(err, "tcp connection to server") {
 		time.Sleep(2 * time.Second)
@@ -184,9 +187,9 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	algParams := shared.ParseAlgParams(alg)
 	expTime := ""
 	if val, ok := algParams["exp_time"]; ok {
-		expTime = val
+		expTime = val[:(len(val) - 1)]
 	}
-	output := fmt.Sprintf("proto:%s, tput_mbps: %s, delay_ms: %s, elapsed_s: %s, exptime: %s", proto, tput_mbps, delay_ms, elapsed, expTime)
+	output := fmt.Sprintf("\rproto:%s, tput_mbps: %s, delay_ms: %s, elapsed_s: %s, exptime_s: %s", proto, tput_mbps, delay_ms, elapsed, expTime)
 	fmt.Println(output)
 	//fmt.Println("proto:%s,tput_mbps:%s%.1f,delay_ms:%s%d,elapsed:%.1f", alg, BLUE, tput_mbps, RED, delay_ms, elapsed)
 	/*log.WithFields(log.Fields{
@@ -204,7 +207,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 
 }
 
-func measureUDP(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool, bool) {
+func measureUDP(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool, progress_string string) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool, bool) {
 	timed_out := false
 	flow_throughputs := results.BytesTimeMap{}
 	flow_times := results.OnOffMap{}
@@ -378,14 +381,14 @@ func measureUDP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	return flow_throughputs, flow_times, timeRTTMap, timed_out, false
 }
 
-func runExperiment(f func(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool, bool), IP string, alg string, report *results.CCResults, protocol string, port string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool) (bool, bool) {
+func runExperiment(f func(server_ip string, alg string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool, progress_string string) (results.BytesTimeMap, results.OnOffMap, results.TimeRTTMap, bool, bool), IP string, alg string, report *results.CCResults, protocol string, port string, num_cycles int, cycle int, exp_time time.Duration, lock_servers bool, progress_string string) (bool, bool) {
 	throughput := make(results.BytesTimeMap)
 	flow_times := make(results.OnOffMap)
 	time_map := make(results.TimeRTTMap)
 	timed_out := false
 	locked := false
 
-	throughput, flow_times, time_map, timed_out, locked = f(IP, alg, num_cycles, cycle, exp_time, lock_servers)
+	throughput, flow_times, time_map, timed_out, locked = f(IP, alg, num_cycles, cycle, exp_time, lock_servers, progress_string)
 
 	if !timed_out {
 		report.Throughput[alg][cycle] = throughput
@@ -397,7 +400,7 @@ func runExperiment(f func(server_ip string, alg string, num_cycles int, cycle in
 }
 
 func sendReport(report []byte) {
-	log.Info("Sending report to server")
+	// log.Info("Sending report to server")
 	conn, err := net.DialTimeout("tcp", config.DB_IP+":"+config.DB_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
 	if CheckError(err) {
 		return
@@ -483,6 +486,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 	locked := true
 	num_finished := 0
 	retries := 0
+	progress_string := ""
 	for cycle < num_cycles {
 		// loop through each algorithm
 		for _, alg_line := range algs {
@@ -494,10 +498,10 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 				report.Delay[alg][cycle] = tempReport.Delay[alg][cycle]
 				report.FlowTimes[alg][cycle] = tempReport.FlowTimes[alg][cycle]
 				// log.WithFields(log.Fields{"alg": alg, "cycle": cycle}).Warn("Used results in saved file for this algorithm and cycle")
-				log.Info("skipping")
+				// log.Info("skipping")
 				goto saveToFile // continue onto next algorithm and cycle
 			} else {
-				log.WithFields(log.Fields{"alg": alg, "proto": proto, "server": IP}).Info(fmt.Sprintf("Starting Experiment %d of %d", place+1, total_experiments))
+				// log.WithFields(log.Fields{"alg": alg, "proto": proto, "server": IP}).Info(fmt.Sprintf("Starting Experiment %d of %d", place+1, total_experiments))
 			}
 
 			this_exp_time = exp_time
@@ -513,11 +517,12 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 			timed_out = false
 			locked = true
 			retries = 0
+			progress_string = fmt.Sprintf("(%d/%d): ", place+1, total_experiments)
 			for !timed_out && locked && retries < config.LOCKED_RETRIES {
 				if proto == "tcp" {
-					timed_out, locked = runExperiment(measureTCP, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, 1, cycle, this_exp_time, lock_servers)
+					timed_out, locked = runExperiment(measureTCP, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, 1, cycle, this_exp_time, lock_servers, progress_string)
 				} else if proto == "udp" {
-					timed_out, locked = runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, 1, cycle, this_exp_time, lock_servers)
+					timed_out, locked = runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, 1, cycle, this_exp_time, lock_servers, progress_string)
 				} else {
 					log.Warn("Unknown protocol! Skipping...")
 					break
@@ -543,7 +548,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 		cycle++
 	}
 
-	sendTime := sendTimeStr()
+	sendTime := currentTime()
 	report.SendTime = sendTime
 	if num_finished > 0 {
 		sendReport(results.EncodeCCResults(&report))
@@ -555,11 +560,8 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 	return sendTime, place, num_finished
 }
 
-func sendTimeStr() string {
-	return time.Now().UTC().Format("20060102150405")
-}
 func currentTime() string {
-	hour, min, sec := time.Now().UTC().Clock()
+	hour, min, sec := time.Now().Clock()
 	return fmt.Sprintf("%d.%d.%d", hour, min, sec)
 }
 
@@ -621,12 +623,10 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v1.4-c72"
+	version := "v2.0"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
-
-	log.Info("If this script fails to complete for any reason, re-run with the --resume flag to pick up where you left off.")
 
 	finishedIPs := make([]string, 0)
 	var progressFile *os.File
@@ -697,7 +697,7 @@ func main() {
 					sendMap[ip] = sendTime
 					continue
 				}
-				log.WithFields(log.Fields{"ip": ip}).Info(fmt.Sprintf("Contacting Server %d/%d ", count, len(servers)))
+				fmt.Printf("Contacting Server %d: %s\n", count, ip)
 				sendTime, new_place, num_finished = runExperimentOnMachine(ip, algs, num_cycles, place, total_experiments, *should_resume, exp_time, lock_servers)
 				if num_finished > 0 {
 					num_servers_contacted += 1
@@ -717,7 +717,7 @@ func main() {
 
 		if num_servers_contacted > 0 {
 			// now ask the server for the link to the graph
-			log.Info("We will now give links to the graphs summarizing the experiment. They might not load immediately.")
+			// log.Info("We will now give links to the graphs summarizing the experiment. They might not load immediately.")
 			count = 1
 			for IP, time := range sendMap {
 				if time == "NONE" {
@@ -725,8 +725,9 @@ func main() {
 				}
 				info := results.GraphInfo{ServerIP: IP, SendTime: time}
 				url := getURLFromServer(info)
-				result := fmt.Sprintf("View result # %d at %s\n", count, url)
-				log.Info(result)
+				result := fmt.Sprintf("Results for server %s : %s\n", IP, url)
+				fmt.Printf(result)
+				// log.Info(result)
 				count++
 			}
 		} else {
@@ -750,6 +751,6 @@ func main() {
 
 	}
 
-	log.Info("All experiments finished.")
+	// log.Info("All experiments finished.")
 
 }
