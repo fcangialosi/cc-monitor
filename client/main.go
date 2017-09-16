@@ -556,7 +556,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 }
 
 func currentTime() string {
-	hour, min, sec := time.Now().Clock()
+	hour, min, sec := time.Now().UTC().Clock()
 	return fmt.Sprintf("%d.%d.%d", hour, min, sec)
 }
 
