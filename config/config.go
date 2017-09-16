@@ -1,6 +1,7 @@
 package config
 
 const HOME = "/home/ubuntu/"
+
 // conversion
 const BYTES_TO_MBITS = .000008
 
@@ -49,7 +50,7 @@ const MIN_ON_TIME = 1000 // atleast send for one second
 const MIN_OFF_TIME = 500
 const NUM_CYCLES = 3
 const TRANSFER_BUF_SIZE = 2048
-const URL_PREFIX = "http://34.230.33.142"
+const URL_PREFIX = "http://nimbus.akshayn.xyz"
 const PATH_TO_GRAPH_SCRIPT = "/home/ubuntu/cc-monitor/monitor_plots/graph_transfer_data.sh"
 const PATH_TO_GRAPH_THROUGHPUT_SCRIPT = "/home/ubuntu/cc-monitor/monitor_plots/graph_throughput.sh"
 const PATH_TO_GRAPH_RESULTS = "/home/ubuntu/exp_results"

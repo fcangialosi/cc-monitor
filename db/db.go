@@ -134,6 +134,7 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 			// check if everything exists
 			server_file := fmt.Sprintf("%s_logs", server_ip)
 			location := getIPLocation(ip_file, server_ip)
+			location = server_ip
 			if location != "NOT_FOUND" {
 				server_file = fmt.Sprintf("%s_logs", location)
 			}
@@ -157,15 +158,15 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 			checkErrMsg(err, "writing bytes to file")
 
 			// make the graph -> name it according to the time and location
-			graph_title := fmt.Sprintf("Transfer_to_%s_AWS", location)
-			graph_location := fmt.Sprintf("%s_%s", current_time, location)
-			graph_directory := fmt.Sprintf("%s/%s/%s/%s", config.PATH_TO_GRAPH_RESULTS, server_file, current_date, current_time)
+			graph_title := fmt.Sprintf("%s_to_%s", client_ip, location)
+			graph_location := fmt.Sprintf("%s", current_time)
+			graph_directory := fmt.Sprintf("%s/%s-%s/%s", config.PATH_TO_GRAPH_RESULTS, server_ip, client_ip, current_time)
 			err = os.MkdirAll(graph_directory, 0777)
 			if err != nil {
 				log.WithFields(log.Fields{"err": err, "path": path}).Panic("Creating graph path to store results")
 			}
 
-			shellCommand(fmt.Sprintf("mv %s%s-%s/* %s/%s/", config.DB_SERVER_CCP_TMP, server_ip, client_ip, path, current_time), true)
+			shellCommand(fmt.Sprintf("mv %s%s-%s/* %s/", config.DB_SERVER_CCP_TMP, server_ip, client_ip, graph_directory), true)
 			log.WithFields(log.Fields{"LOCATION": graph_location, "full path": full_path, "title": graph_title, "directory": graph_directory}).Info("args to file transfer thing")
 			args := []string{full_path, graph_location, graph_title, graph_directory}
 			cmd := exec.Command(config.PATH_TO_GRAPH_SCRIPT, args...) // graphing scripts  moves the image to file with the python web server running
@@ -225,15 +226,9 @@ func getGraphInfo(ip_file string) {
 			checkErrMsg(err, "reading URL prefix string")
 			report := results.DecodeGraphInfo(p[:n])
 			server_ip := report.ServerIP
-			server_file := fmt.Sprintf("%s", server_ip)
+			client_ip := strings.Split(c.RemoteAddr().String(), ":")[0]
 			current_time := report.SendTime
-			current_date := currentDate()
-
-			location := getIPLocation(ip_file, server_ip)
-			if location != "NOT_FOUND" {
-				server_file = fmt.Sprintf("%s", location)
-			}
-			path := fmt.Sprintf("%s_logs/%s/%s", server_file, current_date, current_time)
+			path := fmt.Sprintf("%s-%s/%s", server_ip, client_ip, current_time)
 			// find the correct URL and return
 			URL := config.URL_PREFIX + "/" + path
 			conn.Write([]byte(URL))
