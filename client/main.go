@@ -548,7 +548,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 		cycle++
 	}
 
-	sendTime := currentTime()
+	sendTime := sendTimeStr()
 	report.SendTime = sendTime
 	if num_finished > 0 {
 		sendReport(results.EncodeCCResults(&report))
@@ -558,6 +558,10 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 	err := ioutil.WriteFile(localResultsStorage, b, 0777)
 	CheckErrMsg(err, "Writing file into bytes")
 	return sendTime, place, num_finished
+}
+
+func sendTimeStr() string {
+	return fmt.Sprintf(time.Now().UTC().Format("20060102150405"))
 }
 
 func currentTime() string {
