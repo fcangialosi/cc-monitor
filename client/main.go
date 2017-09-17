@@ -83,16 +83,24 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	if _, ok := shared.ParseAlgParams(alg)["exp_time"]; !ok {
 		alg = alg + " exp_time=" + exp_time.String()
 	}
-	algTime := fmt.Sprintf("%s %t %s", curTime, lock_servers, alg)
-	conn.Write([]byte(algTime))
+
+	user := os.Getenv("MAHIMAHI_BASE")
+	if user == "" {
+		user = "-"
+	}
+	total_exp, err := strconv.Atoi(strings.Split(progress_string, "/")[1])
+	total_time_second := (exp_time * time.Duration(total_exp)) / time.Second
+	server_req := fmt.Sprintf("%s %s %t %d %s", curTime, alg, lock_servers, total_time_second, user)
+	conn.Write([]byte(server_req))
 	// now wait for start
 	n, err := conn.Read(recvBuf)
-	resp := string(recvBuf[:n])
-	if resp == config.SERVER_LOCKED {
-		log.Warn(fmt.Sprintf("Server currently locked for another experiment. Will try again in %d seconds.", config.RETRY_WAIT))
+	resp := strings.Split(string(recvBuf[:n]), " ")
+
+	if resp[0] == config.SERVER_LOCKED {
+		log.Warn(fmt.Sprintf("Server currently locked by %s until %s. Will try again in %s.", resp[1], resp[2], config.RETRY_WAIT)) // TODO
 		return flow_throughputs, flow_times, delay, false, true
 	}
-	if resp != config.START_FLOW {
+	if resp[0] != config.START_FLOW {
 		log.Error("Did not receive start from server")
 		return flow_throughputs, flow_times, delay, true, false
 	}
@@ -517,7 +525,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 			timed_out = false
 			locked = true
 			retries = 0
-			progress_string = fmt.Sprintf("(%d/%d): ", place+1, total_experiments)
+			progress_string = fmt.Sprintf("%d/%d", place+1, total_experiments)
 			for !timed_out && locked && retries < config.LOCKED_RETRIES {
 				if proto == "tcp" {
 					timed_out, locked = runExperiment(measureTCP, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, 1, cycle, this_exp_time, lock_servers, progress_string)
@@ -627,7 +635,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v2.0"
+	version := "v2.0-c2"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()

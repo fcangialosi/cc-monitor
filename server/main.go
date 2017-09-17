@@ -23,11 +23,15 @@ import (
 var sendBuf []byte = make([]byte, config.TCP_TRANSFER_SIZE)
 var rng *rand.Rand
 var server_locked bool
+var locked_by string
+var locked_until time.Time
 var mu sync.Mutex
 
 func init() {
 	rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 	server_locked = false
+	locked_by = ""
+	locked_until = time.Time{}
 }
 
 func checkErrMsg(err error, message string) {
@@ -233,23 +237,33 @@ func handleRequestTCP(conn *net.TCPConn) {
 
 	log.WithFields(log.Fields{"client": clientIPPort, "req": string(reqBuf[:n]), "now": time.Now()}).Info("New measurement requested")
 
-	reqTime := strings.SplitN(string(reqBuf[:n]), " ", 4)
+	reqTime := strings.SplitN(string(reqBuf[:n]), " ", 6)
 	curTime := reqTime[0]
-	lock_servers := reqTime[1] == "true"
-	alg := reqTime[2]
-	params := reqTime[3]
+	acquire_lock := reqTime[1] == "true"
+	req_from := reqTime[2]
+	if req_from == "-" {
+		req_from = clientIP
+	}
+	lock_seconds, err := strconv.Atoi(reqTime[3])
+	if err != nil {
+		lock_seconds = 0
+	}
+	alg := reqTime[4]
+	params := reqTime[5]
 	parsed_params := parseAlgParams(params)
 
 	mu.Lock()
-	if server_locked {
+	if server_locked && req_from != locked_by {
 		mu.Unlock()
 		log.Warn("Server locked. Denying request...")
-		conn.Write([]byte(config.SERVER_LOCKED))
+		conn.Write([]byte(fmt.Sprintf("%s %s %s", config.SERVER_LOCKED, locked_by, locked_until.Format("Mon Jan _2 3:04PM"))))
 		return
 	}
-	if lock_servers {
+	if acquire_lock {
 		log.Warn("Client request for server lock granted.")
 		server_locked = true
+		locked_by = req_from
+		locked_until = time.Now().Add(time.Duration(lock_seconds) * time.Second)
 	}
 	mu.Unlock()
 
@@ -329,10 +343,14 @@ sendloop:
 		}
 	}
 
-	log.Info("Releasing lock")
-	mu.Lock()
-	server_locked = false
-	mu.Unlock()
+	if !acquire_lock {
+		log.Info("Releasing lock")
+		mu.Lock()
+		server_locked = false
+		locked_by = ""
+		locked_until = time.Time{}
+		mu.Unlock()
+	}
 
 	return
 }
