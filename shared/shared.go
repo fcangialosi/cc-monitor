@@ -63,6 +63,7 @@ type YAMLConfig struct {
 	Exp_time     string
 	Lock_servers bool
 	Servers      ServerList
+	Retry_locked bool
 }
 
 func ReadYAMLConfig(config_file string) *YAMLConfig {
@@ -80,13 +81,13 @@ func ReadYAMLConfig(config_file string) *YAMLConfig {
 	return &config
 }
 
-func ParseYAMLConfig(config_file string) (ServerList, int, time.Duration, bool) {
+func ParseYAMLConfig(config_file string) (ServerList, int, time.Duration, bool, bool) {
 	config := ReadYAMLConfig(config_file)
 	exp_time, err := time.ParseDuration(config.Exp_time)
 	if err != nil {
 		log.Fatal("Config contains invalid exp_time, expected format: [0-9]?(s|m|h)")
 	}
-	return config.Servers, config.Num_cycles, exp_time, config.Lock_servers
+	return config.Servers, config.Num_cycles, exp_time, config.Lock_servers, config.Retry_locked
 }
 
 func EncodeConfig(config *YAMLConfig) []byte {
@@ -96,6 +97,7 @@ func EncodeConfig(config *YAMLConfig) []byte {
 	e.Encode(config.Exp_time)
 	e.Encode(config.Lock_servers)
 	e.Encode(config.Servers)
+	e.Encode(config.Retry_locked)
 	return w.Bytes()
 }
 
@@ -110,5 +112,6 @@ func DecodeConfig(data []byte) YAMLConfig {
 	d.Decode(&config.Exp_time)
 	d.Decode(&config.Lock_servers)
 	d.Decode(&config.Servers)
+	d.Decode(&config.Retry_locked)
 	return config
 }

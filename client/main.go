@@ -21,6 +21,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var RETRY_LOCKED bool
+
 /*Simple function to print errors or ignore them*/
 func CheckError(err error) bool {
 	if err != nil {
@@ -101,7 +103,12 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	resp := strings.SplitN(string(recvBuf[:n]), " ", 3)
 
 	if resp[0] == config.SERVER_LOCKED {
-		fmt.Printf("\rServer currently locked by %s for %s. I will continue to retry until I am able to connect.", resp[1], resp[2])
+		fmt.Printf("\rServer currently locked by %s for %s.", resp[1], resp[2])
+		if RETRY_LOCKED {
+			fmt.Printf("I will continue to retry until I am able to connect.\n")
+		} else {
+			fmt.Printf("Skipping...\n")
+		}
 		return flow_throughputs, flow_times, delay, false, true
 	}
 	if resp[0] != config.START_FLOW {
@@ -542,6 +549,9 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 				if !locked {
 					break
 				}
+				if !RETRY_LOCKED {
+					break
+				}
 				retries += 1
 				time.Sleep(time.Second * config.RETRY_WAIT)
 			}
@@ -601,7 +611,7 @@ func getURLFromServer(gg results.GraphInfo) string {
 	return string(recvBuf[:n])
 }
 
-func PullConfigFromServer() (shared.ServerList, int, time.Duration, bool) {
+func PullConfigFromServer() (shared.ServerList, int, time.Duration, bool, bool) {
 	conn, err := net.DialTimeout("tcp", config.DB_IP+":"+config.IP_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
 	if err != nil {
 		log.Fatal("Error contacting config server: ", err)
@@ -619,7 +629,7 @@ func PullConfigFromServer() (shared.ServerList, int, time.Duration, bool) {
 	if err != nil {
 		log.Fatal("Config contains invalid exp_time, expected format: [0-9]?(s|m|h)")
 	}
-	return config.Servers, config.Num_cycles, exp_time, config.Lock_servers
+	return config.Servers, config.Num_cycles, exp_time, config.Lock_servers, config.Retry_locked
 }
 
 var use_mm = flag.Bool("mm", false, "If true, connect to a local server from inside a mahimahi shell")
@@ -639,7 +649,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v2.0.3"
+	version := "v2.0.5"
 	fmt.Printf("cctest client %s\n\n", version)
 
 	flag.Parse()
@@ -677,22 +687,26 @@ func main() {
 		var num_cycles int
 		var exp_time time.Duration
 		var lock_servers bool
+		var retry_locked bool
 		if *local_iplist != "" {
 			if _, err := os.Stat(*local_iplist); os.IsNotExist(err) {
 				log.Fatal("Unable to find config file ", *local_iplist)
 			}
-			servers, num_cycles, exp_time, lock_servers = shared.ParseYAMLConfig(*local_iplist)
+			servers, num_cycles, exp_time, lock_servers, retry_locked = shared.ParseYAMLConfig(*local_iplist)
 		} else {
-			servers, num_cycles, exp_time, lock_servers = PullConfigFromServer()
+			servers, num_cycles, exp_time, lock_servers, retry_locked = PullConfigFromServer()
 		}
+		RETRY_LOCKED = retry_locked
 
 		sendMap := make(map[string]string) // maps IPs to times the report was sent
 
 		count := 1
 		total_experiments := 0
 		place := 0
-		for _, d := range servers {
+		fmt.Printf("Found %d available test servers:\n", len(servers))
+		for i, d := range servers {
 			for ip, algs := range d {
+				fmt.Printf("  (%d)  %s\n", i+1, ip)
 				total_experiments += len(algs) * num_cycles
 				if stringInSlice(ip, finishedIPs) {
 					place += len(algs) * num_cycles
@@ -728,27 +742,20 @@ func main() {
 				sendMap[ip] = sendTime
 				fmt.Fprintf(progressWriter, "%s\n", ip)
 				progressWriter.Flush()
+
+				if send_time, ok := sendMap[ip]; ok && send_time != "NONE" {
+					info := results.GraphInfo{ServerIP: ip, SendTime: send_time}
+					url := getURLFromServer(info)
+					fmt.Printf("Results for server %s : %s\n", ip, url)
+				}
 			}
+
 		}
 
-		if num_servers_contacted > 0 {
-			// now ask the server for the link to the graph
-			// log.Info("We will now give links to the graphs summarizing the experiment. They might not load immediately.")
-			count = 1
-			for IP, time := range sendMap {
-				if time == "NONE" {
-					continue
-				}
-				info := results.GraphInfo{ServerIP: IP, SendTime: time}
-				url := getURLFromServer(info)
-				result := fmt.Sprintf("Results for server %s : %s\n", IP, url)
-				fmt.Printf(result)
-				// log.Info(result)
-				count++
-			}
-		} else {
+		if num_servers_contacted <= 0 {
 			log.Warn("All servers are currently locked or unreachable. If they are unreachable, please check your network connectivity. If they are all locked, please try running the test again at a later time. Thank you!")
 		}
+
 		// delete all the files
 		for _, d := range servers {
 			for ip, _ := range d {
@@ -759,6 +766,7 @@ func main() {
 				}
 			}
 		}
+
 		// delete progress files
 		err := os.Remove(config.LOCAL_PROGRESS_FILE)
 		if err != nil {
@@ -766,7 +774,4 @@ func main() {
 		}
 
 	}
-
-	// log.Info("All experiments finished.")
-
 }
