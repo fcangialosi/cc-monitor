@@ -98,7 +98,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	conn.Write([]byte(server_req))
 	// now wait for start
 	n, err := conn.Read(recvBuf)
-	resp := strings.Split(string(recvBuf[:n]), " ")
+	resp := strings.SplitN(string(recvBuf[:n]), " ", 3)
 
 	if resp[0] == config.SERVER_LOCKED {
 		log.Warn(fmt.Sprintf("Server currently locked by %s until %s. I will continue to retry until I am able to connect.", resp[1], resp[2]))
