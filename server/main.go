@@ -250,11 +250,10 @@ func handleRequestTCP(conn *net.TCPConn) {
 	parsed_params := parseAlgParams(params)
 
 	mu.Lock()
-	log.WithFields(log.Fields{"server_locked": server_locked, "req_from": req_from, "locked_by": locked_by, "acquire_lock": acquire_lock}).Info("debug")
 	if server_locked && req_from != locked_by {
 		mu.Unlock()
 		log.Warn("Server locked. Denying request...")
-		conn.Write([]byte(fmt.Sprintf("%s %s %s", config.SERVER_LOCKED, locked_by, locked_until.Format("Mon Jan _2 3:04PM"))))
+		conn.Write([]byte(fmt.Sprintf("%s %s %s", config.SERVER_LOCKED, locked_by, locked_until.Sub(time.Now()).String())))
 		return
 	}
 	if !server_locked && acquire_lock {

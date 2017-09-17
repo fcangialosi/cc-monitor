@@ -101,7 +101,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	resp := strings.SplitN(string(recvBuf[:n]), " ", 3)
 
 	if resp[0] == config.SERVER_LOCKED {
-		log.Warn(fmt.Sprintf("Server currently locked by %s until %s. I will continue to retry until I am able to connect.", resp[1], resp[2]))
+		fmt.Printf("\rServer currently locked by %s for %s. I will continue to retry until I am able to connect.", resp[1], resp[2])
 		return flow_throughputs, flow_times, delay, false, true
 	}
 	if resp[0] != config.START_FLOW {
@@ -110,7 +110,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	}
 
 	// log.Info("Connection established.")
-	fmt.Printf("Connection established.")
+	fmt.Printf("\rConnection established.")
 
 	// now start the timer
 	start := time.Now() // start of flow is when client sends first message to send back data
@@ -150,7 +150,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 			fmt.Printf("\r")
 			bar = progress.AddBar(dline, int(exp_time/time.Millisecond))
 			bar.PrependSecRemaining()
-			bar.PrependString(progress_string + " >")
+			bar.PrependString(progress_string + " |")
 			bar.AppendOtherBytes()
 			progress.Start()
 		}
@@ -639,7 +639,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v2.0-c2"
+	version := "v2.0.1"
 	fmt.Printf("cctest %s\n\n", version)
 
 	flag.Parse()
