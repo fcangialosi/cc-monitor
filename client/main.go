@@ -650,7 +650,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v2.0.5"
+	version := "v2.0.6"
 	fmt.Printf("cctest client %s\n\n", version)
 
 	flag.Parse()
@@ -718,6 +718,7 @@ func main() {
 		fmt.Printf("\n")
 		num_finished := 0
 		num_servers_contacted := 0
+	server_loop:
 		for _, d := range servers {
 			for ip, algs := range d {
 				sendTime := "NONE"
@@ -732,9 +733,6 @@ func main() {
 				}
 				fmt.Printf("Contacting Server %d: %s\n", count, ip)
 				sendTime, new_place, num_finished = runExperimentOnMachine(ip, algs, num_cycles, place, len(algs), *should_resume, exp_time, lock_servers)
-				if num_finished > 0 {
-					num_servers_contacted += 1
-				}
 				place = new_place
 				sendMap[ip] = sendTime
 				count++
@@ -752,6 +750,8 @@ func main() {
 						url := getURLFromServer(info)
 						fmt.Printf("Results for server %s : %s\n", ip, url)
 					}
+					num_servers_contacted += 1
+					break server_loop
 				}
 			}
 
