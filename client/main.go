@@ -758,7 +758,7 @@ func main() {
 		}
 
 		if num_servers_contacted <= 0 {
-			fmt.Printf("All servers are currently locked or unreachable.\nIf they are unreachable, please check your network connectivity.\nIf they are all locked, please try running the test again at a later time.\nThank you!")
+			fmt.Printf("\nAll servers are currently locked or unreachable.\nIf they are unreachable, please check your network connectivity.\nIf they are all locked, please try running the test again at a later time.\nThank you!\n")
 		}
 
 		// delete all the files
