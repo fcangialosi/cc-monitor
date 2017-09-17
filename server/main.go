@@ -184,17 +184,14 @@ func handleSRTTRequest(conn *net.TCPConn) {
 		line := scanner.Text()
 		brokenLine := strings.Split(line, " ")
 		if len(brokenLine) < 10 {
-			log.Warn("not enough lines")
 			continue
 		}
 		if !(strings.Contains(line, "ffff")) { // to be able to parse for mahimahi correctly
-			log.Warn("no ffff")
 			continue
 		}
 		// check client port is in the RCV field, as it could show up in the timestamp field
 		rcvField := brokenLine[2]
 		if !(strings.Contains(rcvField, clientPort)) {
-			log.Warn("no client port")
 			continue
 		}
 		timestamp, _ := strconv.ParseFloat(brokenLine[0], 64)
