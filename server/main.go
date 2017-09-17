@@ -25,6 +25,7 @@ var rng *rand.Rand
 var server_locked bool
 var locked_by string
 var locked_until time.Time
+var lock_expires time.Time
 var mu sync.Mutex
 
 func init() {
@@ -249,21 +250,6 @@ func handleRequestTCP(conn *net.TCPConn) {
 	params := reqTime[5]
 	parsed_params := parseAlgParams(params)
 
-	mu.Lock()
-	if server_locked && req_from != locked_by {
-		mu.Unlock()
-		log.Warn("Server locked. Denying request...")
-		conn.Write([]byte(fmt.Sprintf("%s %s %s", config.SERVER_LOCKED, locked_by, locked_until.Sub(time.Now()).String())))
-		return
-	}
-	if !server_locked && acquire_lock {
-		log.Warn("Client request for server lock granted.")
-		server_locked = true
-		locked_by = req_from
-		locked_until = time.Now().Add(time.Duration(lock_seconds) * time.Second)
-	}
-	mu.Unlock()
-
 	on_time := time.Millisecond * config.MEAN_ON_TIME_MS
 	if manual_exp_time, ok := parsed_params["exp_time"]; ok {
 		new_on_time, err := time.ParseDuration(manual_exp_time)
@@ -273,6 +259,22 @@ func handleRequestTCP(conn *net.TCPConn) {
 			on_time = new_on_time
 		}
 	}
+
+	mu.Lock()
+	if server_locked && req_from != locked_by && time.Now().Before(lock_expires) {
+		mu.Unlock()
+		log.Warn("Server locked. Denying request...")
+		conn.Write([]byte(fmt.Sprintf("%s %s %s", config.SERVER_LOCKED, locked_by, (locked_until.Sub(time.Now()) / time.Second * time.Second).String())))
+		return
+	}
+	if !server_locked && acquire_lock {
+		log.Warn("Client request for server lock granted.")
+		server_locked = true
+		locked_by = req_from
+		locked_until = time.Now().Add(time.Duration(lock_seconds) * time.Second)
+	}
+	lock_expires = time.Now().Add(on_time + (30 * time.Second))
+	mu.Unlock()
 
 	file, err := conn.File()
 	if err != nil {
