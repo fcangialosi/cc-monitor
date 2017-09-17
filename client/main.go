@@ -94,7 +94,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 		lock_servers = false
 	}
 	total_time_second := (exp_time * time.Duration(total_exp)) / time.Second
-	server_req := fmt.Sprintf("%s %t %d %s %s", curTime, lock_servers, user, total_time_second, alg)
+	server_req := fmt.Sprintf("%s %t %s %d %s", curTime, lock_servers, user, total_time_second, alg)
 	conn.Write([]byte(server_req))
 	// now wait for start
 	n, err := conn.Read(recvBuf)
