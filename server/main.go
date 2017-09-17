@@ -516,6 +516,10 @@ func runTCPProbe(killCh chan bool, port string, outfile string) {
 var my_public_ip string
 
 func main() {
+
+	version := "v2.0.3"
+	fmt.Printf("cctest server %s\n\n", version)
+
 	quit := make(chan struct{})
 
 	log.Info("Preparing TCP Probe")
