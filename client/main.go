@@ -201,14 +201,13 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	// ************ RESULTS ****
 	tput_mbps := color.BlueString(fmt.Sprintf("%0.1f", singleThroughputMeasurement(flow_throughputs[bytes_received], bytes_received)))
 	delay_ms := color.RedString(fmt.Sprintf("%d", int(fullDelay/count)))
-	elapsed := fmt.Sprintf("%0.1f", elapsed(start)/1000)
 	proto := color.GreenString(shared.FriendlyAlgString(alg))
 	algParams := shared.ParseAlgParams(alg)
 	expTime := ""
 	if val, ok := algParams["exp_time"]; ok {
 		expTime = val[:(len(val) - 1)]
 	}
-	output := fmt.Sprintf("\rproto:%s, tput_mbps: %s, delay_ms: %s, elapsed_s: %s, exptime_s: %s", proto, tput_mbps, delay_ms, elapsed, expTime)
+	output := fmt.Sprintf("\rproto:%s, tput_mbps: %s, delay_ms: %s, exptime_s: %s", proto, tput_mbps, delay_ms, expTime)
 	fmt.Println(output)
 	//fmt.Println("proto:%s,tput_mbps:%s%.1f,delay_ms:%s%d,elapsed:%.1f", alg, BLUE, tput_mbps, RED, delay_ms, elapsed)
 	/*log.WithFields(log.Fields{
@@ -650,7 +649,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v2.0.6"
+	version := "v2.0.7"
 	fmt.Printf("cctest client %s\n\n", version)
 
 	flag.Parse()
@@ -705,9 +704,8 @@ func main() {
 		total_experiments := 0
 		place := 0
 		fmt.Printf("Found %d available test servers:\n", len(servers))
-		for i, d := range servers {
+		for _, d := range servers {
 			for ip, algs := range d {
-				fmt.Printf("  (%d)  %s\n", i+1, ip)
 				total_experiments += len(algs) * num_cycles
 				if stringInSlice(ip, finishedIPs) {
 					place += len(algs) * num_cycles
@@ -715,12 +713,12 @@ func main() {
 				}
 			}
 		}
-		fmt.Printf("\n")
 		num_finished := 0
 		num_servers_contacted := 0
 	server_loop:
-		for _, d := range servers {
+		for i, d := range servers {
 			for ip, algs := range d {
+				fmt.Printf("(%d)  %s\n", i+1, ip)
 				sendTime := "NONE"
 				place = 0
 				new_place := 0
@@ -731,7 +729,7 @@ func main() {
 					sendMap[ip] = sendTime
 					continue
 				}
-				fmt.Printf("Contacting Server %d: %s\n", count, ip)
+				fmt.Printf("\tAttempting to connect...")
 				sendTime, new_place, num_finished = runExperimentOnMachine(ip, algs, num_cycles, place, len(algs), *should_resume, exp_time, lock_servers)
 				place = new_place
 				sendMap[ip] = sendTime
