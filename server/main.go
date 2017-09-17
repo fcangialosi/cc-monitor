@@ -250,6 +250,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 	parsed_params := parseAlgParams(params)
 
 	mu.Lock()
+	log.WithFields(log.Fields{"server_locked": server_locked, "req_from": req_from, "locked_by": locked_by, "acquire_lock": acquire_lock}).Info("debug")
 	if server_locked && req_from != locked_by {
 		mu.Unlock()
 		log.Warn("Server locked. Denying request...")
