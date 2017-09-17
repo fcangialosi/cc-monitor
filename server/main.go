@@ -241,6 +241,8 @@ func handleRequestTCP(conn *net.TCPConn) {
 	req_from := reqTime[2]
 	if req_from == "-" {
 		req_from = clientIP
+	} else {
+		req_from = req_from + " (" + clientIP + ")"
 	}
 	lock_seconds, err := strconv.Atoi(reqTime[3])
 	if err != nil {
@@ -261,9 +263,9 @@ func handleRequestTCP(conn *net.TCPConn) {
 	}
 
 	mu.Lock()
-	if server_locked && req_from != locked_by && time.Now().Before(lock_expires) {
+	if server_locked && req_from != locked_by && time.Now().Before(lock_expires) && time.Now().Before(locked_until.Add(30*time.Second)) {
 		mu.Unlock()
-		log.Warn("Server locked. Denying request...")
+		log.WithFields(log.Fields{"expires": lock_expires, "locked_by": locked_by}).Warn("Server locked. Denying request...")
 		conn.Write([]byte(fmt.Sprintf("%s %s %s", config.SERVER_LOCKED, locked_by, (locked_until.Sub(time.Now()) / time.Second * time.Second).String())))
 		return
 	}
@@ -517,7 +519,7 @@ var my_public_ip string
 
 func main() {
 
-	version := "v2.0.6"
+	version := "v2.0.7"
 	fmt.Printf("cctest server %s\n\n", version)
 
 	quit := make(chan struct{})
