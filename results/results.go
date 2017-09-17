@@ -12,7 +12,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type BytesTimeMap map[uint32]float32
+type BytesTimeMap map[uint64]float32
 type TimeRTTMap map[float32]float32
 type OnOffMap map[string]float32
 

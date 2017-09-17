@@ -38,13 +38,13 @@ func elapsed(start time.Time) float32 {
 }
 
 /*Used by both Remy and TCP*/
-func singleThroughputMeasurement(t float32, bytes_received uint32) float32 {
+func singleThroughputMeasurement(t float32, bytes_received uint64) float32 {
 	//log.WithFields(log.Fields{"t": t, "bytes received": bytes_received}).Warn("Time being passed into single throughout measurement function")
-	return (float32(bytes_received) * config.BYTES_TO_MBITS) / (t / 1000) // returns in Mbps
+	return float32((float64(bytes_received) * config.BYTES_TO_MBITS) / (float64(t) / 1000)) // returns in Mbps
 }
 
 /*Measure throughput at increments*/
-func measureThroughput(start time.Time, bytes_received uint32, m results.BytesTimeMap) {
+func measureThroughput(start time.Time, bytes_received uint64, m results.BytesTimeMap) {
 	cur_time := elapsed(start)
 	m[bytes_received] = cur_time
 }
@@ -64,7 +64,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	// loop over each cycle and request TCP server for "1" on and off
 	last_received_time := float32(0)
 	recvBuf := make([]byte, config.TCP_TRANSFER_SIZE)
-	bytes_received := uint32(0)
+	bytes_received := uint64(0)
 
 	// start connection
 	gen_conn, err := net.DialTimeout("tcp", server_ip+":"+config.MEASURE_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
@@ -155,7 +155,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 			progress.Start()
 		}
 
-		bytes_received += uint32(n)
+		bytes_received += uint64(n)
 		last_received_time = elapsed(original_start)
 		bar.Set(int(last_received_time), int(bytes_received))
 		measureThroughput(start, bytes_received, flow_throughputs)
@@ -235,7 +235,7 @@ func measureUDP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	// }()
 
 	// for each flow, start a separate connection to the server to spawn genericCC
-	bytes_received := uint32(0)
+	bytes_received := uint64(0)
 	shouldEcho := (alg[:4] == "remy")
 	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
 
@@ -357,7 +357,7 @@ func measureUDP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 			break
 		}
 
-		bytes_received += uint32(n)
+		bytes_received += uint64(n)
 		last_received_time = elapsed(original_start)
 		measureThroughput(start, bytes_received, flow_throughputs)
 

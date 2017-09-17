@@ -6,10 +6,11 @@ import (
 	"os"
 	"sort"
 
+	"strings"
+
 	"../config"
 	"../results"
 	log "github.com/sirupsen/logrus"
-	"strings"
 )
 
 func checkErrMsg(err error, msg string) {
@@ -23,7 +24,7 @@ func readfile(filepath string, outfile string) {
 		log.Panic("Must provide a valid filepath")
 	}
 
-	filesizes := []uint32{5000, 10000, 20000}
+	filesizes := []uint64{5000, 10000, 20000}
 	// open the file and read it
 	f, err := os.Open(filepath)
 	defer f.Close()
@@ -50,6 +51,20 @@ func readfile(filepath string, outfile string) {
 	createThroughputDelayLogs(&results, outfile)
 
 	fmt.Printf("Wrote data to %s\n", outfile+".csv")
+}
+
+type ByUint64 []uint64
+
+func (s ByUint64) Len() int {
+	return len(s)
+}
+
+func (s ByUint64) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s ByUint64) Less(i, j int) bool {
+	return s[i] < s[j]
 }
 
 type ByUint32 []uint32
@@ -113,14 +128,14 @@ func createThroughputDelayLogs(cc *results.CCResults, outfile string) {
 		fmt.Fprintf(bandW, "time,bandwidth,flow\n")
 		count := 1
 		for flow, flow_thr := range thr {
-			bytes := make([]uint32, 0)
+			bytes := make([]uint64, 0)
 			for bytes_rec := range flow_thr {
 				bytes = append(bytes, bytes_rec)
 			}
-			sort.Sort(ByUint32(bytes))
+			sort.Sort(ByUint64(bytes))
 
 			last_time := float32(0)
-			last_bytes := uint32(0)
+			last_bytes := uint64(0)
 
 			for _, bytes_rec := range bytes {
 				file_time := flow_thr[bytes_rec]
@@ -172,7 +187,7 @@ func createThroughputDelayLogs(cc *results.CCResults, outfile string) {
 	}
 }
 
-func parseLogs(cc *results.CCResults, file_size uint32, outfile string, w *bufio.Writer) {
+func parseLogs(cc *results.CCResults, file_size uint64, outfile string, w *bufio.Writer) {
 
 	/*for alg, flow_times := range cc.FlowTimes {
 	  log.WithFields(log.Fields{"algorithm": alg, "dict": flow_times}).Info("flow times")
@@ -190,7 +205,7 @@ func parseLogs(cc *results.CCResults, file_size uint32, outfile string, w *bufio
 
 		for flow, flow_throughput := range thr {
 			// average throughput in that flow
-			bytes := make([]uint32, 0)
+			bytes := make([]uint64, 0)
 			for bytes_rec := range flow_throughput {
 				bytes = append(bytes, bytes_rec)
 			}
@@ -198,7 +213,7 @@ func parseLogs(cc *results.CCResults, file_size uint32, outfile string, w *bufio
 			for time_sent := range cc.Delay[alg] {
 				ping_send_times = append(ping_send_times, float64(time_sent))
 			}
-			sort.Sort(ByUint32(bytes))
+			sort.Sort(ByUint64(bytes))
 			sort.Float64s(ping_send_times)
 			//log.WithFields(log.Fields{"ping_send_times": ping_send_times, "alg": alg}).Warn("pings in incr order")
 			for _, bytes_rec := range bytes {
