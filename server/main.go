@@ -259,7 +259,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 		conn.Write([]byte(fmt.Sprintf("%s %s %s", config.SERVER_LOCKED, locked_by, locked_until.Format("Mon Jan _2 3:04PM"))))
 		return
 	}
-	if acquire_lock {
+	if !server_locked && acquire_lock {
 		log.Warn("Client request for server lock granted.")
 		server_locked = true
 		locked_by = req_from

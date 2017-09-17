@@ -84,20 +84,24 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 		alg = alg + " exp_time=" + exp_time.String()
 	}
 
-	user := os.Getenv("MAHIMAHI_BASE")
+	user := os.Getenv("USER")
 	if user == "" {
 		user = "-"
 	}
+	curr_exp, err := strconv.Atoi(strings.Split(progress_string, "/")[0])
 	total_exp, err := strconv.Atoi(strings.Split(progress_string, "/")[1])
+	if curr_exp == total_exp {
+		lock_servers = false
+	}
 	total_time_second := (exp_time * time.Duration(total_exp)) / time.Second
-	server_req := fmt.Sprintf("%s %s %t %d %s", curTime, alg, lock_servers, total_time_second, user)
+	server_req := fmt.Sprintf("%s %t %d %s %s", curTime, lock_servers, total_time_second, user, alg)
 	conn.Write([]byte(server_req))
 	// now wait for start
 	n, err := conn.Read(recvBuf)
 	resp := strings.Split(string(recvBuf[:n]), " ")
 
 	if resp[0] == config.SERVER_LOCKED {
-		log.Warn(fmt.Sprintf("Server currently locked by %s until %s. Will try again in %s.", resp[1], resp[2], config.RETRY_WAIT)) // TODO
+		log.Warn(fmt.Sprintf("Server currently locked by %s until %s. I will continue to retry until I am able to connect.", resp[1], resp[2]))
 		return flow_throughputs, flow_times, delay, false, true
 	}
 	if resp[0] != config.START_FLOW {
@@ -146,7 +150,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 			fmt.Printf("\r")
 			bar = progress.AddBar(dline, int(exp_time/time.Millisecond))
 			bar.PrependSecRemaining()
-			bar.PrependString(progress_string)
+			bar.PrependString(progress_string + " >")
 			bar.AppendOtherBytes()
 			progress.Start()
 		}
@@ -159,7 +163,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	progress.Stop()
 	fmt.Printf("Retrieving rtts from server...")
 	conn2, err := net.DialTimeout("tcp", server_ip+":"+config.SRTT_INFO_PORT, config.CONNECT_TIMEOUT*time.Second)
-	if CheckErrMsg(err, "tcp connection to server") {
+	if CheckErrMsg(err, "\rFailed to retrieve RTTs from server") {
 		time.Sleep(2 * time.Second)
 		return flow_throughputs, flow_times, delay, true, false
 	}
@@ -526,7 +530,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 			locked = true
 			retries = 0
 			progress_string = fmt.Sprintf("%d/%d", place+1, total_experiments)
-			for !timed_out && locked && retries < config.LOCKED_RETRIES {
+			for !timed_out && locked { // && retries < config.LOCKED_RETRIES {
 				if proto == "tcp" {
 					timed_out, locked = runExperiment(measureTCP, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, 1, cycle, this_exp_time, lock_servers, progress_string)
 				} else if proto == "udp" {
