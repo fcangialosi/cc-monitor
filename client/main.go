@@ -70,7 +70,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 
 	// start connection
 	gen_conn, err := net.DialTimeout("tcp", server_ip+":"+config.MEASURE_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
-	if CheckErrMsg(err, "tcp connection to server") {
+	if CheckErrMsg(err, "Failed to connect to server. Perhaps it is offline?") {
 		time.Sleep(2 * time.Second)
 		return flow_throughputs, flow_times, delay, true, false
 	}
@@ -103,7 +103,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	resp := strings.SplitN(string(recvBuf[:n]), " ", 3)
 
 	if resp[0] == config.SERVER_LOCKED {
-		fmt.Printf("\rServer currently locked by %s for %s.", resp[1], resp[2])
+		fmt.Printf("\rServer currently locked by %s for %s. ", resp[1], resp[2])
 		if RETRY_LOCKED {
 			fmt.Printf("I will continue to retry until I am able to connect.\n")
 		} else {
@@ -506,6 +506,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 	num_finished := 0
 	retries := 0
 	progress_string := ""
+outer_loop:
 	for cycle < num_cycles {
 		// loop through each algorithm
 		for _, alg_line := range algs {
@@ -550,7 +551,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 					break
 				}
 				if !RETRY_LOCKED {
-					break
+					break outer_loop
 				}
 				retries += 1
 				time.Sleep(time.Second * config.RETRY_WAIT)
@@ -714,11 +715,13 @@ func main() {
 				}
 			}
 		}
+		fmt.Printf("\n")
 		num_finished := 0
 		num_servers_contacted := 0
 		for _, d := range servers {
 			for ip, algs := range d {
 				sendTime := "NONE"
+				place = 0
 				new_place := 0
 				if stringInSlice(ip, finishedIPs) {
 					// file should be available to look for send time
@@ -728,7 +731,7 @@ func main() {
 					continue
 				}
 				fmt.Printf("Contacting Server %d: %s\n", count, ip)
-				sendTime, new_place, num_finished = runExperimentOnMachine(ip, algs, num_cycles, place, total_experiments, *should_resume, exp_time, lock_servers)
+				sendTime, new_place, num_finished = runExperimentOnMachine(ip, algs, num_cycles, place, len(algs), *should_resume, exp_time, lock_servers)
 				if num_finished > 0 {
 					num_servers_contacted += 1
 				}
@@ -743,10 +746,12 @@ func main() {
 				fmt.Fprintf(progressWriter, "%s\n", ip)
 				progressWriter.Flush()
 
-				if send_time, ok := sendMap[ip]; ok && send_time != "NONE" {
-					info := results.GraphInfo{ServerIP: ip, SendTime: send_time}
-					url := getURLFromServer(info)
-					fmt.Printf("Results for server %s : %s\n", ip, url)
+				if num_finished > 0 {
+					if send_time, ok := sendMap[ip]; ok && send_time != "NONE" {
+						info := results.GraphInfo{ServerIP: ip, SendTime: send_time}
+						url := getURLFromServer(info)
+						fmt.Printf("Results for server %s : %s\n", ip, url)
+					}
 				}
 			}
 
