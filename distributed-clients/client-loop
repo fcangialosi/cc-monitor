@@ -6,8 +6,7 @@ if [[ $# -ne 1 ]] ; then
 fi
 
 MYNAME=$1
-LOGFILE=./client-loop.log
-PROGRESS=./client-loop.out
+PROGRESS=./cc-client.log
 
 # Check if name is correct
 CHECK=`python check-schedule.py $MYNAME`
@@ -16,25 +15,25 @@ if [[ $CHECK < 0 ]] ; then
 	exit $CHECK
 fi
 
-echo "Connected to scheduler. Writing output to $LOGFILE and progress to $PROGRESS"
+echo "Connected to scheduler. Writing progress to $PROGRESS"
 
 while true
 do
 	# Get next slot
 	SLEEP_FOR=`python check-schedule.py $MYNAME`
 	if [[ $SLEEP_FOR < 0 ]] ; then
-		echo "$(date) : Schedule finished. Exiting..." >> $LOGFILE 2>&1
+		echo "$(date) : Schedule finished. Exiting..."
 		exit $SLEEP_FOR
 	fi
-	echo "$(date) : My next slot is in $SLEEP_FOR seconds." >> $LOGFILE 2>&1
+	echo "$(date) : My next slot is in $SLEEP_FOR seconds."
 
 	# Wait for slot
 	sleep $SLEEP_FOR
 
 	# It's my turn! Run the client...
 	# NOTE: progress info is written to stdout, results are written to stderr
-	echo "$(date) : Starting client" >> $LOGFILE 2>&1
-	./cc-client-linux >> $PROGRESS 2>> $LOGFILE
+	echo "$(date) : Starting client"
+	./cc-client-linux --config remote-config.yaml 2>> $PROGRESS
 
 	# Do it again...
 done
