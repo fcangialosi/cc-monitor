@@ -44,8 +44,11 @@ func readfile(filepath string, outfile string) {
 	// write header line into the file
 	_, err = fmt.Fprintf(w, "delay,throughput,algorithm,filesize\n")
 	for _, filesize := range filesizes {
-		parseLogs(&results, filesize*1000, outfile, w) // array is in KB, not bytes
+		parseLogs(&results, filesize*1000, outfile, w, false) // array is in KB, not bytes
 	}
+	log.Info("finished for normal, now for last")
+	// now do it for the last filesize achieved
+	parseLogs(&results, 1000, outfile, w, true)
 	w.Flush()
 
 	createThroughputDelayLogs(&results, outfile)
@@ -187,7 +190,7 @@ func createThroughputDelayLogs(cc *results.CCResults, outfile string) {
 	}
 }
 
-func parseLogs(cc *results.CCResults, file_size uint64, outfile string, w *bufio.Writer) {
+func parseLogs(cc *results.CCResults, file_size uint32, outfile string, w *bufio.Writer, last bool) {
 
 	/*for alg, flow_times := range cc.FlowTimes {
 	  log.WithFields(log.Fields{"algorithm": alg, "dict": flow_times}).Info("flow times")
@@ -216,8 +219,15 @@ func parseLogs(cc *results.CCResults, file_size uint64, outfile string, w *bufio
 			sort.Sort(ByUint64(bytes))
 			sort.Float64s(ping_send_times)
 			//log.WithFields(log.Fields{"ping_send_times": ping_send_times, "alg": alg}).Warn("pings in incr order")
+
+			/*If last filesize -> file_size = the larges bytes receieved*/
+			if last {
+				file_size = bytes[len(bytes)-1]
+				log.Info("setting fiesize to filesize: ", file_size)
+			}
 			for _, bytes_rec := range bytes {
-				if bytes_rec > file_size {
+
+				if bytes_rec >= file_size {
 					// use this as the rough estimate of the throughput
 					file_time := flow_throughput[bytes_rec]
 					//log.WithFields(log.Fields{"bytes": bytes_rec, "time rec": file_time}).Info("byte count")
@@ -241,7 +251,12 @@ func parseLogs(cc *results.CCResults, file_size uint64, outfile string, w *bufio
 			flow_avg_del = flow_tot_del / float32(flow_num_valid)
 			flow_avg_thr = flow_tot_thr / float32(flow_num_valid)
 			filesize_mb := file_size / 1000000
-			fmt.Fprintf(w, "%g,%g,%s,%dMB\n", flow_avg_del, flow_avg_thr, alg, filesize_mb)
+			if last {
+				log.Info("IN LAST")
+				fmt.Fprintf(w, "%g,%g,%s,%s\n", flow_avg_del, flow_avg_thr, alg, "last")
+			} else {
+				fmt.Fprintf(w, "%g,%g,%s,%dMB\n", flow_avg_del, flow_avg_thr, alg, filesize_mb)
+			}
 		}
 
 		//log.WithFields(log.Fields{"alg": alg, "thr_measurement": flow_avg_thr, "del_measurement": flow_avg_del, "file size": file_size}).Warn("ALG STATS")
@@ -269,7 +284,7 @@ func getAvgDelayUntil(flow_time_map map[string]float32, delay_map map[float32]fl
 	//log.WithFields(log.Fields{"list": relevant_rtts}).Info("relevant rtt list")
 	if file_time > (flow_end - flow_start) {
 		log.WithFields(log.Fields{"start": flow_start, "end": flow_end, "time": file_time}).Warn("Did not receive up to this file_time")
-		return 0
+		file_time = flow_end
 	}
 	//log.WithFields(log.Fields{"start": flow_start, "end": flow_end, "time": file_time, "ping before": (flow_start + file_time)}).Warn("Info")
 	total_del := float32(0)

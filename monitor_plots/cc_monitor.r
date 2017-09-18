@@ -25,6 +25,6 @@ myplot <- myplot + theme(legend.text=element_text(size=14))
 
 # add the title
 filepath <- paste('~/cc-monitor/monitor_plots/',plot_title)
-myplot <- myplot + ggtitle(title) + labs(x="Delay(ms)",y="Throughput(mbps)") + 
+myplot <- myplot + ggtitle(title) + labs(x="Mean delay(ms)",y="Throughput(mbps)") + 
 ggsave(plot_title)
 dev.off()
