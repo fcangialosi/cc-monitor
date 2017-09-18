@@ -296,15 +296,22 @@ func handleRequestTCP(conn *net.TCPConn) {
 		}
 		args_string := strings.Join(args, " ") + " " + params
 		// cmd := shellCommand(args_string, false)
-		cmd := exec.Command("sudo", strings.Split(args_string, " ")...)
-		if err := cmd.Start(); err != nil {
-			log.WithFields(log.Fields{"err": err, "cmd": cmd}).Error("Error starting ccpl")
+		ccpl_cmd := exec.Command("sudo", strings.Split(args_string, " ")...)
+		ccpl_cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		if err := ccpl_cmd.Start(); err != nil {
+			log.WithFields(log.Fields{"err": err, "cmd": ccpl_cmd}).Error("Error starting ccpl")
 		}
 
 		defer func() {
-			if err := cmd.Process.Kill(); err != nil {
-				log.Warn("error stopping ccpl")
-			}
+			// NOTE ccpl actually starts as a child of sudo, so we need to kill not
+			// only the proc but also all ITS children:
+			// https://medium.com/@felixge/killing-a-child-process-and-all-of-its-children-in-go-54079af94773
+			syscall.Kill(-ccpl_cmd.Process.Pid, syscall.SIGKILL)
+			/*
+				if err := ccpl_cmd.Process.Kill(); err != nil {
+					log.Warn("error stopping ccpl")
+				}
+			*/
 			// Copy logfile to database
 			remotepath := config.DB_SERVER_CCP_TMP + my_public_ip + "-" + strings.Split(conn.RemoteAddr().String(), ":")[0] + "/"
 
@@ -519,7 +526,7 @@ var my_public_ip string
 
 func main() {
 
-	version := "v2.0.7"
+	version := "v2.0.8"
 	fmt.Printf("cctest server %s\n\n", version)
 
 	quit := make(chan struct{})
