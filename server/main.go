@@ -526,7 +526,7 @@ var my_public_ip string
 
 func main() {
 
-	version := "v2.0.8"
+	version := "v2.0.9"
 	fmt.Printf("cctest server %s\n\n", version)
 
 	quit := make(chan struct{})

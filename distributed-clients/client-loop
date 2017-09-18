@@ -1,0 +1,40 @@
+#!/bin/bash
+
+if [[ $# -ne 1 ]] ; then
+	echo "usage: ./client-loop.sh [NAME]"
+	exit -1
+fi
+
+MYNAME=$1
+LOGFILE=./client-loop.log
+PROGRESS=./client-loop.out
+
+# Check if name is correct
+CHECK=`python check-schedule.py $MYNAME`
+if [[ $CHECK < 0 ]] ; then
+	echo "Scheduler doesn't know I exist :( Are you sure $MYNAME is my name?"
+	exit $CHECK
+fi
+
+echo "Connected to scheduler. Writing output to $LOGFILE and progress to $PROGRESS"
+
+while true
+do
+	# Get next slot
+	SLEEP_FOR=`python check-schedule.py $MYNAME`
+	if [[ $SLEEP_FOR < 0 ]] ; then
+		echo "$(date) : Schedule finished. Exiting..." >> $LOGFILE 2>&1
+		exit $SLEEP_FOR
+	fi
+	echo "$(date) : My next slot is in $SLEEP_FOR seconds." >> $LOGFILE 2>&1
+
+	# Wait for slot
+	sleep $SLEEP_FOR
+
+	# It's my turn! Run the client...
+	# NOTE: progress info is written to stdout, results are written to stderr
+	echo "$(date) : Starting client" >> $LOGFILE 2>&1
+	./cc-client-linux >> $PROGRESS 2>> $LOGFILE
+
+	# Do it again...
+done
