@@ -1,16 +1,36 @@
 package shared
 
 import (
+	"../config"
+	"bufio"
 	"bytes"
 	"encoding/gob"
-	"io/ioutil"
-	"strings"
-	"time"
-
 	log "github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v2"
+	"io/ioutil"
+	"os"
+	"strings"
+	"time"
 )
 
+func MachineHostname(server string) string {
+	file, err := os.Open(config.HOSTNAME_LOCATION_FILE)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.Split(scanner.Text(), " ")
+		if line[1] == server {
+			return line[0]
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
+	}
+	return server
+}
 func ParseAlgParams(line string) (params map[string]string) {
 	params = make(map[string]string)
 	sp := strings.Split(line, " ")

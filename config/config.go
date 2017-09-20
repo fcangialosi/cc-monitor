@@ -99,3 +99,4 @@ const RETRY_WAIT = 60
 // files
 const LOCAL_PROGRESS_FILE = "/tmp/cc-client_progress.log"
 const LOCAL_RESULTS_FILE = "/tmp/cc-client_results.log"
+const HOSTNAME_LOCATION_FILE = "/home/ubuntu/cc-monitor/locations.txt"
