@@ -647,7 +647,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v2.0.12"
+	version := "v2.0.13"
 	fmt.Printf("cctest client %s\n\n", version)
 
 	flag.Parse()
