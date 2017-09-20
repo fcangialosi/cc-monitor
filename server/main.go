@@ -255,7 +255,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 	params := reqTime[6]
 	parsed_params := parseAlgParams(params)
 
-	if client_version != SERVER_VERSION {
+	if client_version != SERVER_VERSION || parsed_params == nil {
 		log.WithFields(log.Fields{"name": req_from, "ip": clientIP}).Warn("Received request from old client. Denying.")
 		conn.Write([]byte(fmt.Sprintf("%s %s", config.VERSION_MISMATCH, SERVER_VERSION)))
 	}
@@ -371,14 +371,17 @@ sendloop:
 	return
 }
 
-func parseAlgParams(line string) (params map[string]string) {
-	params = make(map[string]string)
+func parseAlgParams(line string) map[string]string {
+	params := make(map[string]string)
 	sp := strings.Split(line, " ")
 	for _, param := range sp {
 		kv := strings.Split(param, "=")
+		if len(kv) != 2 {
+			return nil
+		}
 		params[kv[0]] = kv[1]
 	}
-	return
+	return params
 }
 
 func runGCC(srcport string, ip string, alg string) (float64, results.TimeRTTMap) {
@@ -534,7 +537,7 @@ var my_public_ip string
 
 func main() {
 
-	SERVER_VERSION := "v2.0.14"
+	SERVER_VERSION := "v2.0.15"
 	fmt.Printf("cctest server %s\n\n", SERVER_VERSION)
 
 	quit := make(chan struct{})
