@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"io/ioutil"
-	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -104,30 +103,13 @@ func ReadYAMLConfig(config_file string) *YAMLConfig {
 	return &config
 }
 
-func RandomSubsetServers(servers ServerList, pick int) ServerList {
-	if pick <= 0 {
-		pick = 1
-	}
-	if pick > len(servers) {
-		pick = len(servers)
-	}
-	rand.Seed(time.Now().Unix())
-	server_subset := make(ServerList, pick)
-	perm := rand.Perm(len(servers))[:pick]
-	for _, i := range perm {
-		server_subset = append(server_subset, servers[i])
-	}
-	return server_subset
-}
-
 func ParseYAMLConfig(config_file string) (ServerList, int, time.Duration, bool, bool, int) {
 	config := ReadYAMLConfig(config_file)
 	exp_time, err := time.ParseDuration(config.Exp_time)
 	if err != nil {
 		log.Fatal("Config contains invalid exp_time, expected format: [0-9]?(s|m|h)")
 	}
-	server_subset := RandomSubsetServers(config.Servers, config.Pick_servers)
-	return server_subset, config.Num_cycles, exp_time, config.Lock_servers, config.Retry_locked, len(config.Servers)
+	return config.Servers, config.Num_cycles, exp_time, config.Lock_servers, config.Retry_locked, config.Pick_servers
 }
 
 func EncodeConfig(config *YAMLConfig) []byte {

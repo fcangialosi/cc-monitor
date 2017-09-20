@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"net"
 	"os"
 	"strconv"
@@ -630,9 +631,7 @@ func PullConfigFromServer() (shared.ServerList, int, time.Duration, bool, bool, 
 		log.Fatal("Config contains invalid exp_time, expected format: [0-9]?(s|m|h)")
 	}
 
-	server_subset := shared.RandomSubsetServers(config.Servers, config.Pick_servers)
-
-	return server_subset, config.Num_cycles, exp_time, config.Lock_servers, config.Retry_locked, len(config.Servers)
+	return config.Servers, config.Num_cycles, exp_time, config.Lock_servers, config.Retry_locked, config.Pick_servers
 }
 
 //var use_mm = flag.Bool("mm", false, "If true, connect to a local server from inside a mahimahi shell")
@@ -653,7 +652,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	CLIENT_VERSION := "v2.0.16"
+	CLIENT_VERSION := "v2.0.17"
 	fmt.Printf("cctest client %s\n\n", CLIENT_VERSION)
 
 	flag.Parse()
@@ -694,15 +693,22 @@ func main() {
 	var exp_time time.Duration
 	var lock_servers bool
 	var retry_locked bool
-	var num_servers int
+	var num_to_pick int
 	if *local_iplist != "" {
 		if _, err := os.Stat(*local_iplist); os.IsNotExist(err) {
 			log.Fatal("Unable to find config file ", *local_iplist)
 		}
-		servers, num_cycles, exp_time, lock_servers, retry_locked, num_servers = shared.ParseYAMLConfig(*local_iplist)
+		servers, num_cycles, exp_time, lock_servers, retry_locked, num_to_pick = shared.ParseYAMLConfig(*local_iplist)
 	} else {
-		servers, num_cycles, exp_time, lock_servers, retry_locked, num_servers = PullConfigFromServer()
+		servers, num_cycles, exp_time, lock_servers, retry_locked, num_to_pick = PullConfigFromServer()
 	}
+	if num_to_pick <= 0 {
+		num_to_pick = 1
+	}
+	if num_to_pick > len(servers) {
+		num_to_pick = len(servers)
+	}
+
 	RETRY_LOCKED = retry_locked
 	if *name != "" {
 		NAME = *name
@@ -720,7 +726,7 @@ func main() {
 	count := 1
 	total_experiments := 0
 	place := 0
-	fmt.Printf("Found %d available test servers:\n", num_servers)
+	fmt.Printf("Found %d available test servers:\n", len(servers))
 	for _, d := range servers {
 		for ip, algs := range d {
 			total_experiments += len(algs) * num_cycles
@@ -732,9 +738,11 @@ func main() {
 	}
 	num_finished := 0
 	num_servers_contacted := 0
+	rand.Seed(time.Now().Unix())
+	perm := rand.Perm(len(servers))
 server_loop:
-	for i, d := range servers {
-		for ip, algs := range d {
+	for _, i := range perm {
+		for ip, algs := range servers[i] {
 			fmt.Printf("(%d)  %s\n", i+1, ip)
 			sendTime := "NONE"
 			place = 0
@@ -759,7 +767,7 @@ server_loop:
 			fmt.Fprintf(progressWriter, "%s\n", ip)
 			progressWriter.Flush()
 
-			if num_finished > 0 {
+			if num_finished >= num_to_pick {
 				if send_time, ok := sendMap[ip]; ok && send_time != "NONE" {
 					info := results.GraphInfo{ServerIP: ip, SendTime: send_time}
 					url := getURLFromServer(info)
