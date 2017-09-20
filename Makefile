@@ -1,4 +1,4 @@
-all: cc-client cc-server db-server reader
+all: cc-client cc-server db-server reader update-site
 
 cc-client: client/*.go config/*.go results/*.go shared/*.go
 	go build -o ./cc-client ./client/
@@ -17,6 +17,14 @@ release: client/*.go config/*.go results/*.go
 	GOARCH=amd64 GOOS=linux go build -o release/cc-client-linux ./client
 	GOARCH=amd64 GOOS=darwin go build -o release/cc-client-darwin ./client
 	GOARCH=amd64 GOOS=windows go build -o release/cc-client-windows ./client
+
+UNAME := $(shell uname)
+ifeq ($(UNAME), Darwin)
+update-site:
+	./update-binaries-from-mac.sh
+else
+endif
+
 
 clean:
 	rm -f ./cc-client
