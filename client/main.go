@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math/rand"
 	"net"
 	"os"
 	"strconv"
@@ -650,7 +649,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v2.0.11"
+	version := "v2.0.12"
 	fmt.Printf("cctest client %s\n\n", version)
 
 	flag.Parse()
@@ -700,11 +699,6 @@ func main() {
 		RETRY_LOCKED = retry_locked
 		// As per akshay's request: modify the servers so the client picks a new one everytime to run to
 		// balls and bins problem now
-		rand.Seed(time.Now().Unix())
-		randIndex := rand.Int() % len(servers)
-		randServer := servers[randIndex]
-		servers = make(shared.ServerList, 0)
-		servers = append(servers, randServer)
 
 		sendMap := make(map[string]string) // maps IPs to times the report was sent
 

@@ -1,16 +1,18 @@
 package shared
 
 import (
-	"../config"
 	"bufio"
 	"bytes"
 	"encoding/gob"
-	log "github.com/sirupsen/logrus"
-	yaml "gopkg.in/yaml.v2"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"strings"
 	"time"
+
+	"../config"
+	log "github.com/sirupsen/logrus"
+	yaml "gopkg.in/yaml.v2"
 )
 
 func MachineHostname(server string) string {
@@ -84,6 +86,7 @@ type YAMLConfig struct {
 	Lock_servers bool
 	Servers      ServerList
 	Retry_locked bool
+	Pick_servers int
 }
 
 func ReadYAMLConfig(config_file string) *YAMLConfig {
@@ -107,7 +110,20 @@ func ParseYAMLConfig(config_file string) (ServerList, int, time.Duration, bool, 
 	if err != nil {
 		log.Fatal("Config contains invalid exp_time, expected format: [0-9]?(s|m|h)")
 	}
-	return config.Servers, config.Num_cycles, exp_time, config.Lock_servers, config.Retry_locked
+	if config.Pick_servers <= 0 {
+		config.Pick_servers = 1
+	}
+	if config.Pick_servers > len(config.Servers) {
+		config.Pick_servers = len(config.Servers)
+	}
+	rand.Seed(time.Now().Unix())
+	server_subset := make(ServerList, config.Pick_servers)
+	perm := rand.Perm(len(config.Servers))[:config.Pick_servers]
+	log.Info(perm)
+	for _, i := range perm {
+		server_subset = append(server_subset, config.Servers[i])
+	}
+	return server_subset, config.Num_cycles, exp_time, config.Lock_servers, config.Retry_locked
 }
 
 func EncodeConfig(config *YAMLConfig) []byte {
@@ -118,6 +134,7 @@ func EncodeConfig(config *YAMLConfig) []byte {
 	e.Encode(config.Lock_servers)
 	e.Encode(config.Servers)
 	e.Encode(config.Retry_locked)
+	e.Encode(config.Pick_servers)
 	return w.Bytes()
 }
 
@@ -133,5 +150,6 @@ func DecodeConfig(data []byte) YAMLConfig {
 	d.Decode(&config.Lock_servers)
 	d.Decode(&config.Servers)
 	d.Decode(&config.Retry_locked)
+	d.Decode(&config.Pick_servers)
 	return config
 }
