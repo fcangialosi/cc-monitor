@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"net"
 	"os"
 	"strconv"
@@ -697,6 +698,13 @@ func main() {
 			servers, num_cycles, exp_time, lock_servers, retry_locked = PullConfigFromServer()
 		}
 		RETRY_LOCKED = retry_locked
+		// As per akshay's request: modify the servers so the client picks a new one everytime to run to
+		// balls and bins problem now
+		rand.Seed(time.Now().Unix())
+		randIndex := rand.Int() % len(servers)
+		randServer := servers[randIndex]
+		servers = make(shared.ServerList, 0)
+		servers = append(servers, randServer)
 
 		sendMap := make(map[string]string) // maps IPs to times the report was sent
 
