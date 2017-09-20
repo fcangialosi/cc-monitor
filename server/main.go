@@ -28,6 +28,7 @@ var locked_by string
 var locked_until time.Time
 var lock_expires time.Time
 var mu sync.Mutex
+var SERVER_VERSION string
 
 func init() {
 	rng = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -236,7 +237,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 
 	log.WithFields(log.Fields{"client": clientIPPort, "req": string(reqBuf[:n]), "now": time.Now()}).Info("New measurement requested")
 
-	reqTime := strings.SplitN(string(reqBuf[:n]), " ", 6)
+	reqTime := strings.SplitN(string(reqBuf[:n]), " ", 7)
 	curTime := reqTime[0]
 	acquire_lock := reqTime[1] == "true"
 	req_from := reqTime[2]
@@ -245,13 +246,19 @@ func handleRequestTCP(conn *net.TCPConn) {
 	} else {
 		req_from = req_from + " (" + clientIP + ")"
 	}
-	lock_seconds, err := strconv.Atoi(reqTime[3])
+	client_version := reqTime[3]
+	lock_seconds, err := strconv.Atoi(reqTime[4])
 	if err != nil {
 		lock_seconds = 0
 	}
-	alg := reqTime[4]
-	params := reqTime[5]
+	alg := reqTime[5]
+	params := reqTime[6]
 	parsed_params := parseAlgParams(params)
+
+	if client_version != SERVER_VERSION {
+		log.WithFields(log.Fields{"name": req_from, "ip": clientIP}).Warn("Received request from old client. Denying.")
+		conn.Write([]byte(fmt.Sprintf("%s %s", config.VERSION_MISMATCH, SERVER_VERSION)))
+	}
 
 	on_time := time.Millisecond * config.MEAN_ON_TIME_MS
 	if manual_exp_time, ok := parsed_params["exp_time"]; ok {
@@ -527,8 +534,8 @@ var my_public_ip string
 
 func main() {
 
-	version := "v2.0.13"
-	fmt.Printf("cctest server %s\n\n", version)
+	SERVER_VERSION := "v2.0.14"
+	fmt.Printf("cctest server %s\n\n", SERVER_VERSION)
 
 	quit := make(chan struct{})
 

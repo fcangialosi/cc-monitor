@@ -23,6 +23,7 @@ import (
 
 var RETRY_LOCKED bool
 var NAME string
+var CLIENT_VERSION string
 
 /*Simple function to print errors or ignore them*/
 func CheckError(err error) bool {
@@ -93,7 +94,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 		lock_servers = false
 	}
 	total_time_second := (exp_time * time.Duration(total_exp)) / time.Second
-	server_req := fmt.Sprintf("%s %t %s %d %s", curTime, lock_servers, NAME, total_time_second, alg)
+	server_req := fmt.Sprintf("%s %t %s %d %s %s", curTime, lock_servers, NAME, CLIENT_VERSION, total_time_second, alg)
 	conn.Write([]byte(server_req))
 	// now wait for start
 	n, err := conn.Read(recvBuf)
@@ -107,6 +108,8 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 			fmt.Printf("Skipping...\n")
 		}
 		return flow_throughputs, flow_times, delay, false, true
+	} else if resp[0] == config.VERSION_MISMATCH {
+		fmt.Printf("\rERROR: Your client (%s) does not match the version of the server (%s). Please get an updated version of the client from: nimbus2000.csail.mit.edu", CLIENT_VERSION, resp[1])
 	}
 	if resp[0] != config.START_FLOW {
 		log.Error("Did not receive start from server")
@@ -647,8 +650,8 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	version := "v2.0.13"
-	fmt.Printf("cctest client %s\n\n", version)
+	CLIENT_VERSION := "v2.0.14"
+	fmt.Printf("cctest client %s\n\n", CLIENT_VERSION)
 
 	flag.Parse()
 
