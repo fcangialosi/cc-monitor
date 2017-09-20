@@ -104,26 +104,30 @@ func ReadYAMLConfig(config_file string) *YAMLConfig {
 	return &config
 }
 
-func ParseYAMLConfig(config_file string) (ServerList, int, time.Duration, bool, bool) {
+func RandomSubsetServers(servers ServerList, pick int) ServerList {
+	if pick <= 0 {
+		pick = 1
+	}
+	if pick > len(servers) {
+		pick = len(servers)
+	}
+	rand.Seed(time.Now().Unix())
+	server_subset := make(ServerList, pick)
+	perm := rand.Perm(len(servers))[:pick]
+	for _, i := range perm {
+		server_subset = append(server_subset, servers[i])
+	}
+	return server_subset
+}
+
+func ParseYAMLConfig(config_file string) (ServerList, int, time.Duration, bool, bool, int) {
 	config := ReadYAMLConfig(config_file)
 	exp_time, err := time.ParseDuration(config.Exp_time)
 	if err != nil {
 		log.Fatal("Config contains invalid exp_time, expected format: [0-9]?(s|m|h)")
 	}
-	if config.Pick_servers <= 0 {
-		config.Pick_servers = 1
-	}
-	if config.Pick_servers > len(config.Servers) {
-		config.Pick_servers = len(config.Servers)
-	}
-	rand.Seed(time.Now().Unix())
-	server_subset := make(ServerList, config.Pick_servers)
-	perm := rand.Perm(len(config.Servers))[:config.Pick_servers]
-	log.Info(perm)
-	for _, i := range perm {
-		server_subset = append(server_subset, config.Servers[i])
-	}
-	return server_subset, config.Num_cycles, exp_time, config.Lock_servers, config.Retry_locked
+	server_subset := RandomSubsetServers(config.Servers, config.Pick_servers)
+	return server_subset, config.Num_cycles, exp_time, config.Lock_servers, config.Retry_locked, len(config.Servers)
 }
 
 func EncodeConfig(config *YAMLConfig) []byte {

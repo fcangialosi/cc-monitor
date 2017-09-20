@@ -611,7 +611,7 @@ func getURLFromServer(gg results.GraphInfo) string {
 	return string(recvBuf[:n])
 }
 
-func PullConfigFromServer() (shared.ServerList, int, time.Duration, bool, bool) {
+func PullConfigFromServer() (shared.ServerList, int, time.Duration, bool, bool, int) {
 	conn, err := net.DialTimeout("tcp", config.DB_IP+":"+config.IP_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
 	if err != nil {
 		log.Fatal("Error contacting config server: ", err)
@@ -629,7 +629,10 @@ func PullConfigFromServer() (shared.ServerList, int, time.Duration, bool, bool) 
 	if err != nil {
 		log.Fatal("Config contains invalid exp_time, expected format: [0-9]?(s|m|h)")
 	}
-	return config.Servers, config.Num_cycles, exp_time, config.Lock_servers, config.Retry_locked
+
+	server_subset := shared.RandomSubsetServers(config.Servers, config.Pick_servers)
+
+	return server_subset, config.Num_cycles, exp_time, config.Lock_servers, config.Retry_locked, len(config.Servers)
 }
 
 //var use_mm = flag.Bool("mm", false, "If true, connect to a local server from inside a mahimahi shell")
@@ -650,7 +653,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	CLIENT_VERSION := "v2.0.15"
+	CLIENT_VERSION := "v2.0.16"
 	fmt.Printf("cctest client %s\n\n", CLIENT_VERSION)
 
 	flag.Parse()
@@ -691,13 +694,14 @@ func main() {
 	var exp_time time.Duration
 	var lock_servers bool
 	var retry_locked bool
+	var num_servers int
 	if *local_iplist != "" {
 		if _, err := os.Stat(*local_iplist); os.IsNotExist(err) {
 			log.Fatal("Unable to find config file ", *local_iplist)
 		}
-		servers, num_cycles, exp_time, lock_servers, retry_locked = shared.ParseYAMLConfig(*local_iplist)
+		servers, num_cycles, exp_time, lock_servers, retry_locked, num_servers = shared.ParseYAMLConfig(*local_iplist)
 	} else {
-		servers, num_cycles, exp_time, lock_servers, retry_locked = PullConfigFromServer()
+		servers, num_cycles, exp_time, lock_servers, retry_locked, num_servers = PullConfigFromServer()
 	}
 	RETRY_LOCKED = retry_locked
 	if *name != "" {
@@ -716,7 +720,7 @@ func main() {
 	count := 1
 	total_experiments := 0
 	place := 0
-	fmt.Printf("Found %d available test servers:\n", len(servers))
+	fmt.Printf("Found %d available test servers:\n", num_servers)
 	for _, d := range servers {
 		for ip, algs := range d {
 			total_experiments += len(algs) * num_cycles
