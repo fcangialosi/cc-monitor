@@ -22,6 +22,7 @@ import (
 )
 
 var RETRY_LOCKED bool
+var NAME string
 
 /*Simple function to print errors or ignore them*/
 func CheckError(err error) bool {
@@ -86,17 +87,13 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 		alg = alg + " exp_time=" + exp_time.String()
 	}
 
-	user := os.Getenv("USER")
-	if user == "" {
-		user = "-"
-	}
 	curr_exp, err := strconv.Atoi(strings.Split(progress_string, "/")[0])
 	total_exp, err := strconv.Atoi(strings.Split(progress_string, "/")[1])
 	if curr_exp == total_exp {
 		lock_servers = false
 	}
 	total_time_second := (exp_time * time.Duration(total_exp)) / time.Second
-	server_req := fmt.Sprintf("%s %t %s %d %s", curTime, lock_servers, user, total_time_second, alg)
+	server_req := fmt.Sprintf("%s %t %s %d %s", curTime, lock_servers, NAME, total_time_second, alg)
 	conn.Write([]byte(server_req))
 	// now wait for start
 	n, err := conn.Read(recvBuf)
@@ -632,10 +629,11 @@ func PullConfigFromServer() (shared.ServerList, int, time.Duration, bool, bool) 
 	return config.Servers, config.Num_cycles, exp_time, config.Lock_servers, config.Retry_locked
 }
 
-var use_mm = flag.Bool("mm", false, "If true, connect to a local server from inside a mahimahi shell")
-var manual_algs = flag.String("algs", "", "Specify a comma-separated list of algorithms to test, e.g. \"tcp-cubic,tcp-reno\"")
+//var use_mm = flag.Bool("mm", false, "If true, connect to a local server from inside a mahimahi shell")
+//var manual_algs = flag.String("algs", "", "Specify a comma-separated list of algorithms to test, e.g. \"tcp-cubic,tcp-reno\"")
 var local_iplist = flag.String("config", "", "Filename to read ips and algorithms from rather than pulling from server")
 var should_resume = flag.Bool("resume", false, "Resume from most recent unfinished run")
+var name = flag.String("name", "", "Nickname, easier to recognize than IP address, default: $USER")
 
 func stringInSlice(a string, list []string) bool {
 	for _, b := range list {
@@ -673,110 +671,122 @@ func main() {
 	progressWriter := bufio.NewWriter(progressFile)
 
 	// Default to just Remy and TCP Cubic
-	algs := []string{"tcp-cubic"}
 
-	if *use_mm {
-		mahimahi := os.Getenv("MAHIMAHI_BASE")
-		if *manual_algs != "" {
-			algs = strings.Split(*manual_algs, ",")
-		}
-		num_cycles := 1
-		runExperimentOnMachine(mahimahi, algs, num_cycles, 0, len(algs)*num_cycles, false, 30*time.Second, false)
-	} else { // contact DB for files
-		var servers shared.ServerList
-		var num_cycles int
-		var exp_time time.Duration
-		var lock_servers bool
-		var retry_locked bool
-		if *local_iplist != "" {
-			if _, err := os.Stat(*local_iplist); os.IsNotExist(err) {
-				log.Fatal("Unable to find config file ", *local_iplist)
+	/*
+		if *use_mm {
+			algs := []string{"tcp-cubic"}
+			mahimahi := os.Getenv("MAHIMAHI_BASE")
+			if *manual_algs != "" {
+				algs = strings.Split(*manual_algs, ",")
 			}
-			servers, num_cycles, exp_time, lock_servers, retry_locked = shared.ParseYAMLConfig(*local_iplist)
-		} else {
-			servers, num_cycles, exp_time, lock_servers, retry_locked = PullConfigFromServer()
+			num_cycles := 1
+			runExperimentOnMachine(mahimahi, algs, num_cycles, 0, len(algs)*num_cycles, false, 30*time.Second, false)
+		} else { // contact DB for files
+	*/
+	var servers shared.ServerList
+	var num_cycles int
+	var exp_time time.Duration
+	var lock_servers bool
+	var retry_locked bool
+	if *local_iplist != "" {
+		if _, err := os.Stat(*local_iplist); os.IsNotExist(err) {
+			log.Fatal("Unable to find config file ", *local_iplist)
 		}
-		RETRY_LOCKED = retry_locked
-		// As per akshay's request: modify the servers so the client picks a new one everytime to run to
-		// balls and bins problem now
-
-		sendMap := make(map[string]string) // maps IPs to times the report was sent
-
-		count := 1
-		total_experiments := 0
-		place := 0
-		fmt.Printf("Found %d available test servers:\n", len(servers))
-		for _, d := range servers {
-			for ip, algs := range d {
-				total_experiments += len(algs) * num_cycles
-				if stringInSlice(ip, finishedIPs) {
-					place += len(algs) * num_cycles
-					count++
-				}
-			}
+		servers, num_cycles, exp_time, lock_servers, retry_locked = shared.ParseYAMLConfig(*local_iplist)
+	} else {
+		servers, num_cycles, exp_time, lock_servers, retry_locked = PullConfigFromServer()
+	}
+	RETRY_LOCKED = retry_locked
+	if *name != "" {
+		NAME = *name
+	} else {
+		name := os.Getenv("USER")
+		if name == "" {
+			name = "-"
 		}
-		num_finished := 0
-		num_servers_contacted := 0
-	server_loop:
-		for i, d := range servers {
-			for ip, algs := range d {
-				fmt.Printf("(%d)  %s\n", i+1, ip)
-				sendTime := "NONE"
-				place = 0
-				new_place := 0
-				if stringInSlice(ip, finishedIPs) {
-					// file should be available to look for send time
-					localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, ip)
-					sendTime = getSendTimeLocalFile(localResultsStorage)
-					sendMap[ip] = sendTime
-					continue
-				}
-				fmt.Printf("\tAttempting to connect...")
-				sendTime, new_place, num_finished = runExperimentOnMachine(ip, algs, num_cycles, place, len(algs), *should_resume, exp_time, lock_servers)
-				place = new_place
-				sendMap[ip] = sendTime
+	}
+	// As per akshay's request: modify the servers so the client picks a new one everytime to run to
+	// balls and bins problem now
+
+	sendMap := make(map[string]string) // maps IPs to times the report was sent
+
+	count := 1
+	total_experiments := 0
+	place := 0
+	fmt.Printf("Found %d available test servers:\n", len(servers))
+	for _, d := range servers {
+		for ip, algs := range d {
+			total_experiments += len(algs) * num_cycles
+			if stringInSlice(ip, finishedIPs) {
+				place += len(algs) * num_cycles
 				count++
-
-				// the file should also be available, look for sendTime there
+			}
+		}
+	}
+	num_finished := 0
+	num_servers_contacted := 0
+server_loop:
+	for i, d := range servers {
+		for ip, algs := range d {
+			fmt.Printf("(%d)  %s\n", i+1, ip)
+			sendTime := "NONE"
+			place = 0
+			new_place := 0
+			if stringInSlice(ip, finishedIPs) {
+				// file should be available to look for send time
 				localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, ip)
 				sendTime = getSendTimeLocalFile(localResultsStorage)
 				sendMap[ip] = sendTime
-				fmt.Fprintf(progressWriter, "%s\n", ip)
-				progressWriter.Flush()
-
-				if num_finished > 0 {
-					if send_time, ok := sendMap[ip]; ok && send_time != "NONE" {
-						info := results.GraphInfo{ServerIP: ip, SendTime: send_time}
-						url := getURLFromServer(info)
-						fmt.Printf("Results for server %s : %s\n", ip, url)
-					}
-					num_servers_contacted += 1
-					break server_loop
-				}
+				continue
 			}
+			fmt.Printf("\tAttempting to connect...")
+			sendTime, new_place, num_finished = runExperimentOnMachine(ip, algs, num_cycles, place, len(algs), *should_resume, exp_time, lock_servers)
+			place = new_place
+			sendMap[ip] = sendTime
+			count++
 
-		}
+			// the file should also be available, look for sendTime there
+			localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, ip)
+			sendTime = getSendTimeLocalFile(localResultsStorage)
+			sendMap[ip] = sendTime
+			fmt.Fprintf(progressWriter, "%s\n", ip)
+			progressWriter.Flush()
 
-		if num_servers_contacted <= 0 {
-			fmt.Printf("\nAll servers are currently locked or unreachable.\nIf they are unreachable, please check your network connectivity.\nIf they are all locked, please try running the test again at a later time.\nThank you!\n")
-		}
-
-		// delete all the files
-		for _, d := range servers {
-			for ip, _ := range d {
-				localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, ip)
-				err := os.Remove(localResultsStorage)
-				if err != nil {
-					log.Info("Error removing local results storage: ", localResultsStorage)
+			if num_finished > 0 {
+				if send_time, ok := sendMap[ip]; ok && send_time != "NONE" {
+					info := results.GraphInfo{ServerIP: ip, SendTime: send_time}
+					url := getURLFromServer(info)
+					fmt.Printf("Results for server %s : %s\n", ip, url)
 				}
+				num_servers_contacted += 1
+				break server_loop
 			}
-		}
-
-		// delete progress files
-		err := os.Remove(config.LOCAL_PROGRESS_FILE)
-		if err != nil {
-			log.Info("Error removing local progress file: ", config.LOCAL_PROGRESS_FILE)
 		}
 
 	}
+
+	if num_servers_contacted <= 0 {
+		fmt.Printf("\nAll servers are currently locked or unreachable.\nIf they are unreachable, please check your network connectivity.\nIf they are all locked, please try running the test again at a later time.\nThank you!\n")
+	}
+
+	// delete all the files
+	for _, d := range servers {
+		for ip, _ := range d {
+			localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, ip)
+			err := os.Remove(localResultsStorage)
+			if err != nil {
+				log.Info("Error removing local results storage: ", localResultsStorage)
+			}
+		}
+	}
+
+	// delete progress files
+	err := os.Remove(config.LOCAL_PROGRESS_FILE)
+	if err != nil {
+		log.Info("Error removing local progress file: ", config.LOCAL_PROGRESS_FILE)
+	}
+
+	/*
+		}
+	*/
 }
