@@ -190,7 +190,7 @@ func createThroughputDelayLogs(cc *results.CCResults, outfile string) {
 	}
 }
 
-func parseLogs(cc *results.CCResults, file_size uint32, outfile string, w *bufio.Writer, last bool) {
+func parseLogs(cc *results.CCResults, file_size uint64, outfile string, w *bufio.Writer, last bool) {
 
 	/*for alg, flow_times := range cc.FlowTimes {
 	  log.WithFields(log.Fields{"algorithm": alg, "dict": flow_times}).Info("flow times")
