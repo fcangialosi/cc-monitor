@@ -109,8 +109,10 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 			fmt.Printf("Skipping...\n")
 		}
 		return flow_throughputs, flow_times, delay, false, true
-	} else if resp[0] == config.VERSION_MISMATCH {
+	}
+	if resp[0] == config.VERSION_MISMATCH {
 		fmt.Printf("\rERROR: Your client (%s) does not match the version of the server (%s). Please get an updated version of the client from: nimbus2000.csail.mit.edu", CLIENT_VERSION, resp[1])
+		return flow_throughputs, flow_times, delay, false, false
 	}
 	if resp[0] != config.START_FLOW {
 		log.Error("Did not receive start from server")
@@ -652,7 +654,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	CLIENT_VERSION := "v2.0.17"
+	CLIENT_VERSION := "v2.0.19"
 	fmt.Printf("cctest client %s\n\n", CLIENT_VERSION)
 
 	flag.Parse()

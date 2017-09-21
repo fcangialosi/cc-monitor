@@ -258,6 +258,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 	if client_version != SERVER_VERSION || parsed_params == nil {
 		log.WithFields(log.Fields{"name": req_from, "ip": clientIP}).Warn("Received request from old client. Denying.")
 		conn.Write([]byte(fmt.Sprintf("%s %s", config.VERSION_MISMATCH, SERVER_VERSION)))
+		return
 	}
 
 	on_time := time.Millisecond * config.MEAN_ON_TIME_MS
@@ -537,7 +538,7 @@ var my_public_ip string
 
 func main() {
 
-	SERVER_VERSION := "v2.0.17"
+	SERVER_VERSION := "v2.0.19"
 	fmt.Printf("cctest server %s\n\n", SERVER_VERSION)
 
 	quit := make(chan struct{})
