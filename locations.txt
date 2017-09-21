@@ -4,3 +4,5 @@ ec2mumbai 52.66.27.63
 ec2london 35.176.102.108
 ec2california 54.67.52.240
 hari-home 108.7.195.28
+ng-home 173.48.177.222
+deepti-home 24.61.40.182
