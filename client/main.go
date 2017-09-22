@@ -654,7 +654,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	CLIENT_VERSION = "v2.0.20"
+	CLIENT_VERSION = "v2.1.0"
 	fmt.Printf("cctest client %s\n\n", CLIENT_VERSION)
 
 	flag.Parse()
@@ -715,10 +715,10 @@ func main() {
 	if *name != "" {
 		NAME = *name
 	} else {
-		name := os.Getenv("USER")
-		if name == "" {
-			name = "-"
-		}
+		NAME = os.Getenv("USER")
+	}
+	if NAME == "" {
+		NAME = "-"
 	}
 	// As per akshay's request: modify the servers so the client picks a new one everytime to run to
 	// balls and bins problem now
