@@ -1,6 +1,7 @@
 package config
 
 const HOME = "/home/ubuntu/"
+const STORAGE = "/mnt/storage/"
 
 // conversion
 const BYTES_TO_MBITS = .000008
@@ -13,7 +14,7 @@ const DB_TABLE_NAME = "cc_results"
 const DB_USERNAME = "user"
 const DB_PASSWORD = "password"
 const IP_LIST_LOCATION = "/home/ubuntu/ip.txt"
-const REMOTE_YAML_CONFIG = "/home/ubuntu/cc-monitor/remote-config.yaml"
+const REMOTE_YAML_CONFIG = STORAGE + "remote-config.yaml"
 
 // HEADER
 const HEADER_SIZE = 32
@@ -53,7 +54,7 @@ const TRANSFER_BUF_SIZE = 2048
 const URL_PREFIX = "http://nimbus.akshayn.xyz"
 const PATH_TO_GRAPH_SCRIPT = "/home/ubuntu/cc-monitor/monitor_plots/graph_transfer_data.sh"
 const PATH_TO_GRAPH_THROUGHPUT_SCRIPT = "/home/ubuntu/cc-monitor/monitor_plots/graph_throughput.sh"
-const PATH_TO_GRAPH_RESULTS = "/home/ubuntu/exp_results"
+const PATH_TO_GRAPH_RESULTS = STORAGE
 const PATH_TO_GENERIC_CC = "/home/ubuntu/genericCC/sender"
 const PATH_TO_REMY_CC = "/home/ubuntu/cc-monitor/rats/140-160.dna.5"
 const PATH_TO_RATS = "/home/ubuntu/cc-monitor/rats/"
@@ -73,7 +74,7 @@ const PATH_TO_CCP = HOME + "ccp/ccpl"
 const PATH_TO_PRIV_KEY = HOME + ".ssh/rach.pem"
 
 const DB_SERVER = "ubuntu@34.230.33.142"
-const DB_SERVER_CCP_TMP = "/home/ubuntu/exp_results/ccp_tmp/"
+const DB_SERVER_CCP_TMP = PATH_TO_GRAPH_RESULTS + "ccp_tmp/"
 
 // alg names
 const REMY = "remy"
