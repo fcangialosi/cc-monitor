@@ -142,7 +142,6 @@ func handleSRTTRequest(conn *net.TCPConn) {
 	clientIP := strings.Split(clientIPPort, ":")[0]
 	reqBuf := make([]byte, config.MAX_REQ_SIZE)
 	n, err := conn.Read(reqBuf)
-	timePort := string(reqBuf[:n])
 	sp := strings.SplitN(string(reqBuf[:n]), " ", 3)
 	curTime := sp[0]
 	clientPort := sp[1]
