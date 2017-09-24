@@ -51,6 +51,7 @@ func getIPLocation(ip_file string, input_ip string) string {
 	checkError(scanner.Err())
 	return "NOT_FOUND"
 }
+
 func introServer(ip_file string) {
 
 	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.IP_SERVER_PORT)
@@ -134,12 +135,12 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 			// check if everything exists
 			server_file := fmt.Sprintf("%s_logs", server_ip)
 			location := getIPLocation(ip_file, server_ip)
-			location = server_ip
+			location = shared.MachineHostname(server_ip)
 			if location != "NOT_FOUND" {
 				server_file = fmt.Sprintf("%s_logs", location)
 			}
 			filename := fmt.Sprintf("%s_%s.log", client_ip, current_time)
-			path := fmt.Sprintf("/home/ubuntu/exp_results/%s/%s", server_file, current_date)
+			path := fmt.Sprintf(config.PATH_TO_GRAPH_RESULTS+"%s/%s", server_file, current_date)
 			err := os.MkdirAll(path, 0777)
 			if err != nil {
 				log.WithFields(log.Fields{"err": err, "path": path}).Panic("Creating path to store results")
@@ -160,7 +161,7 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 			// make the graph -> name it according to the time and location
 			graph_title := fmt.Sprintf("%s_to_%s", client_ip, location)
 			graph_location := fmt.Sprintf("%s", current_time)
-			graph_directory := fmt.Sprintf("%s/%s-%s/%s", config.PATH_TO_GRAPH_RESULTS, server_ip, client_ip, current_time)
+			graph_directory := fmt.Sprintf("%s%s-%s/%s", config.PATH_TO_GRAPH_RESULTS, shared.MachineHostname(server_ip), shared.MachineHostname(client_ip), current_time)
 			err = os.MkdirAll(graph_directory, 0777)
 			if err != nil {
 				log.WithFields(log.Fields{"err": err, "path": path}).Panic("Creating graph path to store results")
@@ -228,7 +229,7 @@ func getGraphInfo(ip_file string) {
 			server_ip := report.ServerIP
 			client_ip := strings.Split(c.RemoteAddr().String(), ":")[0]
 			current_time := report.SendTime
-			path := fmt.Sprintf("%s-%s/%s", server_ip, client_ip, current_time)
+			path := fmt.Sprintf("%s-%s/%s", shared.MachineHostname(server_ip), shared.MachineHostname(client_ip), current_time)
 			// find the correct URL and return
 			URL := config.URL_PREFIX + "/" + path
 			conn.Write([]byte(URL))
@@ -237,13 +238,8 @@ func getGraphInfo(ip_file string) {
 }
 
 func currentDate() string {
-	_, month, day := time.Now().Date()
+	_, month, day := time.Now().UTC().Date()
 	return fmt.Sprintf("%s-%d", month.String(), day)
-}
-
-func currentTime() string {
-	hour, min, sec := time.Now().Clock()
-	return fmt.Sprintf("%d.%d.%d", hour, min, sec)
 }
 
 func checkError(err error) {
@@ -260,9 +256,6 @@ func checkErrMsg(err error, msg string) {
 
 /*This file is for solely handling the database*/
 func main() {
-	log.Info(currentDate())
-	log.Info(currentTime())
-
 	quit := make(chan struct{})
 	go introServer(config.REMOTE_YAML_CONFIG)
 	db_channel := make(chan results.CCResults)
@@ -270,5 +263,4 @@ func main() {
 	go dbWorker(db_channel, config.IP_LIST_LOCATION)
 	go getGraphInfo(config.IP_LIST_LOCATION)
 	<-quit
-
 }

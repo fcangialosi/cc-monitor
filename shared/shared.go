@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/gob"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -138,4 +139,8 @@ func DecodeConfig(data []byte) YAMLConfig {
 	d.Decode(&config.Retry_locked)
 	d.Decode(&config.Pick_servers)
 	return config
+}
+
+func UTCTimeString() string {
+	return fmt.Sprintf(time.Now().UTC().Format("20060102150405"))
 }

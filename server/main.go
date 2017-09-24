@@ -97,11 +97,6 @@ func measureServerUDP() {
 	}
 }
 
-func currentTime() string {
-	hour, min, sec := time.Now().Clock()
-	return fmt.Sprintf("%d.%d.%d", hour, min, sec)
-}
-
 func measureServerTCP() {
 	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.MEASURE_SERVER_PORT)
 	if err != nil {
@@ -211,7 +206,7 @@ func handleSRTTRequest(conn *net.TCPConn) {
 	conn.Write(results.EncodeLossRTTInfo(&lossRTTInfo))
 	// then delete the file
 	// transfer this to the DB
-	remotepath := config.DB_SERVER_CCP_TMP + shared.MachineHostname(my_public_ip) + "-" + shared.MachineHostname(strings.Split(conn.RemoteAddr().String(), ":")[0]) + "/"
+	remotepath := config.DB_SERVER_CCP_TMP + my_public_ip + "-" + strings.Split(conn.RemoteAddr().String(), ":")[0] + "/"
 
 	shellCommand(fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=no %s mkdir -p %s", config.PATH_TO_PRIV_KEY, config.DB_SERVER, remotepath), true)
 	shellCommand(fmt.Sprintf("scp -i %s %s %s:%s", config.PATH_TO_PRIV_KEY, tcpprobeInfo, config.DB_SERVER, remotepath), true)
@@ -296,7 +291,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 	// Start CCP process in the background
 	if alg[:3] == "ccp" {
 		ccname = "ccp"
-		logname := fmt.Sprintf(config.HOME+"cc-monitor/ccp_logs/%s_%s_%s.log", alg, strings.Replace(params, " ", "_", -1), currentTime())
+		logname := fmt.Sprintf(config.HOME+"cc-monitor/ccp_logs/%s_%s_%s.log", alg, strings.Replace(params, " ", "_", -1), shared.UTCTimeString())
 		args := []string{
 			config.PATH_TO_CCP,
 			"--datapath=kernel",
@@ -398,7 +393,7 @@ func runGCC(srcport string, ip string, alg string) (float64, results.TimeRTTMap)
 	off_time := strconv.Itoa(0)   // have a 0 off time
 	num_cycles := strconv.Itoa(1) // send for 1 on and off period
 	log.WithFields(log.Fields{"num cycles": num_cycles}).Info("num cycles")
-	currentTime := currentTime()
+	currentTime := shared.UTCTimeString()
 	logfileName := fmt.Sprintf("%s_%s.log", ip, currentTime)
 	lossRate := float64(0)
 	if len(strings.Split(alg_path, "=")) == 4 {

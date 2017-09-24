@@ -84,7 +84,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	defer conn.Close()
 
 	// write timestamp for server to be able to identify this client connection later
-	curTime := currentTime()
+	curTime := shared.UTCTimeString()
 	if _, ok := shared.ParseAlgParams(alg)["exp_time"]; !ok {
 		alg = alg + " exp_time=" + exp_time.String()
 	}
@@ -573,7 +573,7 @@ outer_loop:
 		cycle++
 	}
 
-	sendTime := sendTimeStr()
+	sendTime := shared.UTCTimeString()
 	report.SendTime = sendTime
 	if num_finished > 0 {
 		sendReport(results.EncodeCCResults(&report))
@@ -583,15 +583,6 @@ outer_loop:
 	err := ioutil.WriteFile(localResultsStorage, b, 0777)
 	CheckErrMsg(err, "Writing file into bytes")
 	return sendTime, place, num_finished
-}
-
-func sendTimeStr() string {
-	return fmt.Sprintf(time.Now().UTC().Format("20060102150405"))
-}
-
-func currentTime() string {
-	hour, min, sec := time.Now().Clock()
-	return fmt.Sprintf("%d.%d.%d", hour, min, sec)
 }
 
 func CheckErrMsg(err error, message string) bool { // check error
