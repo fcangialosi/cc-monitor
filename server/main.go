@@ -143,8 +143,10 @@ func handleSRTTRequest(conn *net.TCPConn) {
 	reqBuf := make([]byte, config.MAX_REQ_SIZE)
 	n, err := conn.Read(reqBuf)
 	timePort := string(reqBuf[:n])
-	curTime := strings.Split(timePort, "->")[0]
-	clientPort := strings.Split(timePort, "->")[1]
+	sp := strings.SplitN(string(reqBuf[:n]), " ", 3)
+	curTime := sp[0]
+	clientPort := sp[1]
+	alg := strings.Replace(sp[2], " ", "_", -1)
 
 	// filename = IP_time_tcpprobe.log
 	tcpprobeInfo := fmt.Sprintf(config.HOME+"cc-monitor/probes/%s_%s_tcpprobe.log", clientIP, curTime)
@@ -206,7 +208,7 @@ func handleSRTTRequest(conn *net.TCPConn) {
 	conn.Write(results.EncodeLossRTTInfo(&lossRTTInfo))
 	// then delete the file
 	// transfer this to the DB
-	remotepath := config.DB_SERVER_CCP_TMP + my_public_ip + "-" + strings.Split(conn.RemoteAddr().String(), ":")[0] + "/"
+	remotepath := config.DB_SERVER_CCP_TMP + my_public_ip + "-" + strings.Split(conn.RemoteAddr().String(), ":")[0] + "/" + clientIP + "_" + alg + "_tcpprobe.log"
 
 	shellCommand(fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=no %s mkdir -p %s", config.PATH_TO_PRIV_KEY, config.DB_SERVER, remotepath), true)
 	shellCommand(fmt.Sprintf("scp -i %s %s %s:%s", config.PATH_TO_PRIV_KEY, tcpprobeInfo, config.DB_SERVER, remotepath), true)

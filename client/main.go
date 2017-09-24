@@ -179,7 +179,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	}
 	// else get the delay estimates from server
 	infoBuf := make([]byte, 0)
-	curtimePort := fmt.Sprintf("%s->%s", curTime, localPort)
+	curtimePort := fmt.Sprintf("%s %s %s", curTime, localPort, alg)
 	conn2.Write([]byte(curtimePort))
 	// read until the buf is full
 	for {
