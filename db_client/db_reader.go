@@ -104,7 +104,7 @@ func createThroughputDelayLogs(cc *results.CCResults, outfile string) {
 	for alg, thr := range cc.Throughput {
 		log.Info("Creating file for alg ", alg, "outfile ", outfile)
 		algBroken := strings.Split(alg, " ")
-		alg = strings.Join(algBroken, ",")
+		alg = strings.Join(algBroken, "_")
 		inst_algfile := fmt.Sprintf("%s_%s_inst.csv", alg, outfile)
 		inst_algfile_fd, err := os.Create(inst_algfile)
 		checkErrMsg(err, "opening inst csv algfile for writing")
