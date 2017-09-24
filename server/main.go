@@ -326,7 +326,7 @@ func handleRequestTCP(conn *net.TCPConn) {
 				}
 			*/
 			// Copy logfile to database
-			remotepath := config.DB_SERVER_CCP_TMP + my_public_ip + "-" + shared.MachineHostname(strings.Split(conn.RemoteAddr().String(), ":")[0]) + "/"
+			remotepath := config.DB_SERVER_CCP_TMP + my_public_ip + "-" + strings.Split(conn.RemoteAddr().String(), ":")[0]
 
 			shellCommand(fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=no %s mkdir -p %s", config.PATH_TO_PRIV_KEY, config.DB_SERVER, remotepath), true)
 			shellCommand(fmt.Sprintf("scp -i %s %s %s:%s", config.PATH_TO_PRIV_KEY, logname, config.DB_SERVER, remotepath), true)
