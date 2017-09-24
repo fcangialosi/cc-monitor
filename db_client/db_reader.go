@@ -24,7 +24,7 @@ func readfile(filepath string, outfile string) {
 		log.Panic("Must provide a valid filepath")
 	}
 
-	filesizes := []uint64{5000, 10000, 20000}
+	filesizes := []uint64{}
 	// open the file and read it
 	f, err := os.Open(filepath)
 	defer f.Close()
