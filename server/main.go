@@ -207,6 +207,14 @@ func handleSRTTRequest(conn *net.TCPConn) {
 	conn.Write(results.EncodeLossRTTInfo(&lossRTTInfo))
 	// then delete the file
 	// transfer this to the DB
+	algSp := strings.Split(alg, "_")
+	for i, _ := range algSp {
+		if algSp[i] == "exp" {
+			algSp = append(algSp[:i], algSp[i+2:]...)
+			break
+		}
+	}
+	alg = strings.Join(algSp, "_")
 	remotepath := config.DB_SERVER_CCP_TMP + my_public_ip + "-" + strings.Split(conn.RemoteAddr().String(), ":")[0] + "/" + alg + "_tcpprobe.log"
 
 	shellCommand(fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=no %s mkdir -p %s", config.PATH_TO_PRIV_KEY, config.DB_SERVER, remotepath), true)
