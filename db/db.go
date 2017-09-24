@@ -181,7 +181,7 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 			for alg, _ := range rep.Throughput {
 				log.Info("Alg is ", alg)
 				alg_broken := strings.Split(alg, " ")
-				alg = strings.Join(alg_broken, ",")
+				alg = strings.Join(alg_broken, "_")
 				// log for graphing script
 				title := fmt.Sprintf("%s_Throughput", alg)
 				thr_log := fmt.Sprintf("%s_%s", alg, graph_location)

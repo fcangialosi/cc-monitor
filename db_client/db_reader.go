@@ -166,7 +166,7 @@ func createThroughputDelayLogs(cc *results.CCResults, outfile string) {
 	for alg, alg_onoff := range cc.FlowTimes {
 		// do the delay log file
 		algBroken := strings.Split(alg, " ")
-		algFileName := strings.Join(algBroken, ",")
+		algFileName := strings.Join(algBroken, "_")
 
 		delayfile := fmt.Sprintf("%s_%s_delay.csv", algFileName, outfile)
 		delayfile_fd, err := os.Create(delayfile)
