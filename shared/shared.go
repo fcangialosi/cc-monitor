@@ -144,3 +144,14 @@ func DecodeConfig(data []byte) YAMLConfig {
 func UTCTimeString() string {
 	return fmt.Sprintf(time.Now().UTC().Format("20060102150405"))
 }
+
+func RemoveExpTime(alg string) string {
+	algSp := strings.Split(alg, "_")
+	for i, _ := range algSp {
+		if algSp[i] == "exp" {
+			algSp = append(algSp[:i], algSp[i+2:]...)
+			break
+		}
+	}
+	return strings.Join(algSp, "_")
+}

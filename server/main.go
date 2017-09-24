@@ -207,14 +207,7 @@ func handleSRTTRequest(conn *net.TCPConn) {
 	conn.Write(results.EncodeLossRTTInfo(&lossRTTInfo))
 	// then delete the file
 	// transfer this to the DB
-	algSp := strings.Split(alg, "_")
-	for i, _ := range algSp {
-		if algSp[i] == "exp" {
-			algSp = append(algSp[:i], algSp[i+2:]...)
-			break
-		}
-	}
-	alg = strings.Join(algSp, "_")
+	alg = shared.RemoveExpTime(alg)
 	remotepath := config.DB_SERVER_CCP_TMP + my_public_ip + "-" + strings.Split(conn.RemoteAddr().String(), ":")[0]
 
 	shellCommand(fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=no %s mkdir -p %s", config.PATH_TO_PRIV_KEY, config.DB_SERVER, remotepath), true)
@@ -298,9 +291,11 @@ func handleRequestTCP(conn *net.TCPConn) {
 
 	var ccname string
 	// Start CCP process in the background
+	var ccpl_cmd *exec.Cmd
+	var logname string
 	if alg[:3] == "ccp" {
 		ccname = "ccp"
-		logname := fmt.Sprintf(config.HOME+"cc-monitor/ccp_logs/%s_%s_%s.log", alg, strings.Replace(params, " ", "_", -1), shared.UTCTimeString())
+		logname = fmt.Sprintf(config.HOME+"cc-monitor/ccp_logs/%s_%s_ccpl.log", alg, shared.RemoveExpTime(strings.Replace(params, " ", "_", -1)))
 		args := []string{
 			config.PATH_TO_CCP,
 			"--datapath=kernel",
@@ -309,32 +304,14 @@ func handleRequestTCP(conn *net.TCPConn) {
 		}
 		args_string := strings.Join(args, " ") + " " + params
 		// cmd := shellCommand(args_string, false)
-		ccpl_cmd := exec.Command("sudo", strings.Split(args_string, " ")...)
+		ccpl_cmd = exec.Command("sudo", strings.Split(args_string, " ")...)
 		ccpl_cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		if err := ccpl_cmd.Start(); err != nil {
 			log.WithFields(log.Fields{"err": err, "cmd": ccpl_cmd}).Error("Error starting ccpl")
 		}
 
-		defer func() {
-			// NOTE ccpl actually starts as a child of sudo, so we need to kill not
-			// only the proc but also all ITS children:
-			// https://medium.com/@felixge/killing-a-child-process-and-all-of-its-children-in-go-54079af94773
-			syscall.Kill(-ccpl_cmd.Process.Pid, syscall.SIGKILL)
-			/*
-				if err := ccpl_cmd.Process.Kill(); err != nil {
-					log.Warn("error stopping ccpl")
-				}
-			*/
-			// Copy logfile to database
-			remotepath := config.DB_SERVER_CCP_TMP + my_public_ip + "-" + strings.Split(conn.RemoteAddr().String(), ":")[0]
-
-			shellCommand(fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=no %s mkdir -p %s", config.PATH_TO_PRIV_KEY, config.DB_SERVER, remotepath), true)
-			shellCommand(fmt.Sprintf("scp -i %s %s %s:%s", config.PATH_TO_PRIV_KEY, logname, config.DB_SERVER, remotepath), true)
-
-		}()
-
 		// Give ccpl some time to startup
-		time.Sleep(1 * time.Second)
+		time.Sleep(500 * time.Millisecond)
 
 	} else {
 		ccname = alg
@@ -351,7 +328,9 @@ func handleRequestTCP(conn *net.TCPConn) {
 	probeLog := fmt.Sprintf(config.HOME+"cc-monitor/probes/%s_%s_tcpprobe.log", clientIP, curTime)
 	probeKillCh := make(chan bool)
 	go runTCPProbe(probeKillCh, parseString, probeLog)
-	defer func() { probeKillCh <- true }()
+	defer func() {
+		probeKillCh <- true
+	}()
 
 	on_timer := time.After(on_time)
 sendloop:
@@ -371,6 +350,14 @@ sendloop:
 		locked_by = ""
 		locked_until = time.Time{}
 		mu.Unlock()
+	}
+
+	if alg[:3] == "ccp" {
+		shellCommand("pkill ccpl", true)
+		remotepath := config.DB_SERVER_CCP_TMP + my_public_ip + "-" + strings.Split(conn.RemoteAddr().String(), ":")[0]
+
+		shellCommand(fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=no %s mkdir -p %s", config.PATH_TO_PRIV_KEY, config.DB_SERVER, remotepath), true)
+		shellCommand(fmt.Sprintf("scp -i %s %s %s:%s", config.PATH_TO_PRIV_KEY, logname, config.DB_SERVER, remotepath+"/"), true)
 	}
 
 	return
@@ -511,12 +498,14 @@ func runTCPProbe(killCh chan bool, port string, outfile string) {
 	f, err := os.Open("/proc/net/tcpprobe")
 	if err != nil {
 		log.WithFields(log.Fields{"err": err}).Error("Error creating tcpprobe log file")
+		<-killCh
 		return
 	}
 	defer f.Close()
 	out, err := os.Create(outfile)
 	if err != nil {
 		log.WithFields(log.Fields{"err": err}).Error("Error creating tcpprobe log file")
+		<-killCh
 		return
 	}
 
@@ -529,6 +518,7 @@ func runTCPProbe(killCh chan bool, port string, outfile string) {
 			n, err := f.Read(buf)
 			if err != nil {
 				log.WithFields(log.Fields{"err": err}).Warn("Error reading from TCP probe")
+				<-killCh
 				return
 			}
 			if rx.Match(buf) {
@@ -536,13 +526,15 @@ func runTCPProbe(killCh chan bool, port string, outfile string) {
 			}
 		}
 	}
+	<-killCh
+	return
 }
 
 var my_public_ip string
 
 func main() {
 
-	SERVER_VERSION = "v2.1.1"
+	SERVER_VERSION = "v2.1.2"
 	fmt.Printf("cctest server %s\n\n", SERVER_VERSION)
 
 	quit := make(chan struct{})
