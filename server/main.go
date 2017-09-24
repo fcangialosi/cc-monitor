@@ -215,10 +215,10 @@ func handleSRTTRequest(conn *net.TCPConn) {
 		}
 	}
 	alg = strings.Join(algSp, "_")
-	remotepath := config.DB_SERVER_CCP_TMP + my_public_ip + "-" + strings.Split(conn.RemoteAddr().String(), ":")[0] + "/" + alg + "_tcpprobe.log"
+	remotepath := config.DB_SERVER_CCP_TMP + my_public_ip + "-" + strings.Split(conn.RemoteAddr().String(), ":")[0]
 
-	shellCommand(fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=no %s mkdir -p %s", config.PATH_TO_PRIV_KEY, config.DB_SERVER, remotepath), true)
-	shellCommand(fmt.Sprintf("scp -i %s %s %s:%s", config.PATH_TO_PRIV_KEY, tcpprobeInfo, config.DB_SERVER, remotepath), true)
+	shellCommand(fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=no %s mkdir -p %s", config.PATH_TO_PRIV_KEY, config.DB_SERVER), true)
+	shellCommand(fmt.Sprintf("scp -i %s %s %s:%s", config.PATH_TO_PRIV_KEY, tcpprobeInfo, config.DB_SERVER, remotepath+"/"+alg+"_tcpprobe.log"), true)
 
 	os.Remove(tcpprobeInfo)
 	return
