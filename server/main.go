@@ -14,9 +14,9 @@ import (
 	"syscall"
 	"time"
 
-	"../config"
-	"../results"
-	"../shared"
+	"cc-monitor/config"
+	"cc-monitor/results"
+	"cc-monitor/shared"
 	"github.com/rdegges/go-ipify"
 	log "github.com/sirupsen/logrus"
 )

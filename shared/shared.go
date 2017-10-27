@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"../config"
+	"cc-monitor/config"
 	log "github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v2"
 )

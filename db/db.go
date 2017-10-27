@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"../config"
-	"../results"
-	"../shared"
+	"cc-monitor/config"
+	"cc-monitor/results"
+	"cc-monitor/shared"
 	log "github.com/sirupsen/logrus"
 )
 

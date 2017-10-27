@@ -8,8 +8,8 @@ import (
 
 	"strings"
 
-	"../config"
-	"../results"
+	"cc-monitor/config"
+	"cc-monitor/results"
 	log "github.com/sirupsen/logrus"
 )
 
