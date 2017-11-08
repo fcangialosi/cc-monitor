@@ -358,6 +358,12 @@ sendloop:
 		scpCommand := fmt.Sprintf("scp -i %s %s %s:%s", config.PATH_TO_PRIV_KEY, logname, config.DB_SERVER, remotepath+"/")
 		shellCommand(scpCommand, true)
 
+		// remove the log
+		rm_err := os.Remove(logname)
+		if rm_err != nil {
+			log.Info("error on removing file ", logname)
+		}
+
 	}
 
 	return
