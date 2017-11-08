@@ -202,7 +202,7 @@ func WriteBytes(bytes []byte, filename string) string {
 Naming scheme for CCP log given a client and server IP
 */
 func CCPLogLocation(clientIP string, serverIP string) string {
-	return fmt.Sprintf("%s%s-%s", config.DB_SERVER_CCP_TMP, serverIP, clientIP)
+	return fmt.Sprintf("%s%s-%s", config.DB_SERVER_CCP_TMP, MachineHostname(serverIP), MachineHostname(clientIP))
 }
 
 /*

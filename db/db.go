@@ -132,7 +132,8 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 
 			// 3: transfer the ccp/tcpprobe logs for this client into the correct location
 			ccpLogLocation := shared.CCPLogLocation(rep.ClientIP, rep.ServerIP)
-			shellCommand(fmt.Sprintf("mv %s/* %s/", ccpLogLocation, folder), true)
+			mvCommand := fmt.Sprintf("mv %s/* %s/", ccpLogLocation, folder)
+			shellCommand(mvCommand, true)
 
 			// 4: create the graphs using the graphing scripts
 
