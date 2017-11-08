@@ -6,3 +6,4 @@ ng-home 173.48.177.222
 deepti-home 24.61.40.182
 jon-holland 77.81.247.72
 aws-virginia 54.227.155.231
+aws-london 35.176.208.134
