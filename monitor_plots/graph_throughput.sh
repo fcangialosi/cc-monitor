@@ -7,6 +7,9 @@ csvfile="${outfile}.csv"
 delaycsvfile="${outfile}_delay.csv"
 instcsvfile="${outfile}_inst.csv"
 bandwidthcsvfile="${outfile}_bandwidth.csv"
+
+echo "In graph_throughput.sh, outfile name is $outfile"
+
 cd "/home/ubuntu/cc-monitor/monitor_plots"
 RESULTS=$4 # final location to move the file
 mv "/home/ubuntu/cc-monitor/$outfile.csv" "/home/ubuntu/cc-monitor/monitor_plots/$outfile.csv"

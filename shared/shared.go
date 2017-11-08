@@ -155,3 +155,76 @@ func RemoveExpTime(alg string) string {
 	}
 	return strings.Join(algSp, "_")
 }
+
+func RemoveSpacesAlg(alg string) string {
+	/*Replaces spaces with _ in algorithm name for graph filenames*/
+	alg_broken := strings.Split(alg, " ")
+	return strings.Join(alg_broken, "_")
+}
+
+func checkErr(err error, msg string) {
+	if err != nil {
+		log.WithFields(log.Fields{"err": err}).Panic(msg)
+	}
+}
+
+/*
+When a report is sent from client, graphs and logfiles are created and stored in a location:
+GRAPH_LOCATION/serverip-clientip/UTCTime/
+Params: client IP, server IP, clientTime - in form specificed by UTCTimeString()
+returns: path to the logfolder
+*/
+func CreateLogFolder(clientIP string, serverIP string, clientTime string) string {
+	serverLocation := MachineHostname(serverIP) // friendly name
+	clientLocation := MachineHostname(clientIP)
+
+	path := fmt.Sprintf("%s%s-%s/%s", config.PATH_TO_GRAPH_RESULTS, serverLocation, clientLocation, clientTime) // format DIR/server-client/UTCTime
+	log.Info("Making log at path: ", path)
+	err := os.MkdirAll(path, 0777)
+	checkErr(err, fmt.Sprintf("Creating log directory for server %s and client %s at time %s\n", serverIP, clientIP, clientTime))
+
+	return path
+}
+
+/*
+Opens a filename and writes bytes to said file.
+*/
+func WriteBytes(bytes []byte, filename string) string {
+	f, err := os.Create(filename)
+	checkErr(err, fmt.Sprintf("Creating filename with name %s\n", filename))
+	defer f.Close()
+	_, err = f.Write(bytes)
+	checkErr(err, fmt.Sprintf("Writing bytes to file with filename %s\n", filename))
+	return filename
+}
+
+/*
+Naming scheme for CCP log given a client and server IP
+*/
+func CCPLogLocation(clientIP string, serverIP string) string {
+	return fmt.Sprintf("%s%s-%s", config.DB_SERVER_CCP_TMP, serverIP, clientIP)
+}
+
+/*
+Naming scheme for the graph that compares bytes sent across algorithms.
+Returns (graphtitle, graphname)
+*/
+func CompareGraphName(clientIP string, serverIP string, clientTime string) (string, string) {
+	serverLocation := MachineHostname(serverIP) // friendly name
+	clientLocation := MachineHostname(clientIP)
+	graphTitle := fmt.Sprintf("%s_to_%s", clientLocation, serverLocation)
+	graphFilename := fmt.Sprintf("%s-%s-%s_data_transfer", clientIP, serverIP, clientTime)
+
+	return graphTitle, graphFilename
+}
+
+/*
+arguments for throughput graph script
+graphFilename => return value from CompareGraphName (main graphing script run first)
+*/
+func ThroughputGraphName(graphFilename string, alg string) (string, string, string) {
+	graphTitle := fmt.Sprintf("%s_Throughput_Delay", alg)
+	throughputLogfile := fmt.Sprintf("%s_%s", alg, graphFilename)
+	outfile := fmt.Sprintf("%s_throughput", alg)
+	return graphTitle, throughputLogfile, outfile
+}

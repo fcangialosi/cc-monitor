@@ -77,7 +77,9 @@ func introServer(ip_file string) {
 
 }
 func dbServer(ch chan results.CCResults) {
-	log.Info("In db server function")
+	/*
+		Listens for TCP connections where client will send the report of the experiment over.
+	*/
 	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.DB_SERVER_PORT)
 	if err != nil {
 		log.Fatal(err)
@@ -90,7 +92,6 @@ func dbServer(ch chan results.CCResults) {
 
 	for {
 		conn, err := server.AcceptTCP()
-		log.Info("Got a report to read from the client")
 		if err != nil {
 			log.Warning(err)
 		}
@@ -106,11 +107,9 @@ func dbServer(ch chan results.CCResults) {
 					break
 				}
 				report_bytes = append(report_bytes, p[:n]...)
-				//log.WithFields(log.Fields{"n": n}).Info("bytes received")
 			}
-			log.Info("Finished reading the report")
 			report := results.DecodeCCResults(report_bytes)
-			report.ClientIP = conn.RemoteAddr().String() // client didn't put in right IP for some reason
+			report.ClientIP = strings.Split(conn.RemoteAddr().String(), ":")[0] // report client's public IP
 			ch <- report
 		}(conn)
 	}
@@ -118,80 +117,46 @@ func dbServer(ch chan results.CCResults) {
 }
 
 func dbWorker(ch chan results.CCResults, ip_file string) {
-	// TODO reads jobs from channel, writes them to db
-	// db in this case is just writing a file with the results
-
-	// read jobs from results channel forever
+	/*
+		Waits for jobs on the results channel -> and runs graphing and parsing scripts on them.
+	*/
 	for {
 		report := <-ch
 		// spawn go routine to deal with this report
 		go func(rep results.CCResults) {
-			log.Info("got decoded report from channel")
-			server_ip := rep.ServerIP
-			client_ip := strings.Split(rep.ClientIP, ":")[0]
-			current_date := currentDate()
-			current_time := rep.SendTime // client will later ask for where the graph is
+			// 1: create path where the graphs and bytes will go
+			folder := shared.CreateLogFolder(rep.ClientIP, rep.ServerIP, rep.SendTime)
 
-			// check if everything exists
-			server_file := fmt.Sprintf("%s_logs", server_ip)
-			location := getIPLocation(ip_file, server_ip)
-			location = shared.MachineHostname(server_ip)
-			if location != "NOT_FOUND" {
-				server_file = fmt.Sprintf("%s_logs", location)
-			}
-			filename := fmt.Sprintf("%s_%s.log", client_ip, current_time)
-			path := fmt.Sprintf(config.PATH_TO_GRAPH_RESULTS+"%s/%s", server_file, current_date)
-			err := os.MkdirAll(path, 0777)
-			if err != nil {
-				log.WithFields(log.Fields{"err": err, "path": path}).Panic("Creating path to store results")
-			}
+			// 2: write all the bytes to a file called {folder}/bytes.log
+			bytesLogFile := shared.WriteBytes(results.EncodeCCResults(&rep), fmt.Sprintf("%s/%s", folder, "bytes.log"))
 
-			full_path := path + "/" + filename
-			f, err := os.Create(full_path)
-			checkErrMsg(err, "creating file for path "+full_path)
-			log.WithFields(log.Fields{"path": full_path}).Info("Writing decoded results")
-			defer f.Close()
+			// 3: transfer the ccp/tcpprobe logs for this client into the correct location
+			ccpLogLocation := shared.CCPLogLocation(rep.ClientIP, rep.ServerIP)
+			shellCommand(fmt.Sprintf("mv %s/* %s/", ccpLogLocation, folder), true)
 
-			// marshall the struct
-			b := results.EncodeCCResults(&rep)
-			checkErrMsg(err, "marshalling report into bytes")
-			_, err = f.Write(b)
-			checkErrMsg(err, "writing bytes to file")
+			// 4: create the graphs using the graphing scripts
 
-			// make the graph -> name it according to the time and location
-			graph_title := fmt.Sprintf("%s_to_%s", client_ip, location)
-			graph_location := fmt.Sprintf("%s", current_time)
-			graph_directory := fmt.Sprintf("%s%s-%s/%s", config.PATH_TO_GRAPH_RESULTS, shared.MachineHostname(server_ip), shared.MachineHostname(client_ip), current_time)
-			err = os.MkdirAll(graph_directory, 0777)
-			if err != nil {
-				log.WithFields(log.Fields{"err": err, "path": path}).Panic("Creating graph path to store results")
-			}
-
-			shellCommand(fmt.Sprintf("mv %s%s-%s/* %s/", config.DB_SERVER_CCP_TMP, server_ip, client_ip, graph_directory), true)
-			log.WithFields(log.Fields{"LOCATION": graph_location, "full path": full_path, "title": graph_title, "directory": graph_directory}).Info("args to file transfer thing")
-			args := []string{full_path, graph_location, graph_title, graph_directory}
-			cmd := exec.Command(config.PATH_TO_GRAPH_SCRIPT, args...) // graphing scripts  moves the image to file with the python web server running
+			// (a) Summary graph comparing bytes transferred of all protocols
+			graphTitle, graphFilename := shared.CompareGraphName(rep.ClientIP, rep.ServerIP, rep.SendTime)
+			graphScriptArgs := []string{bytesLogFile, graphFilename, graphTitle, folder}
+			log.WithFields(log.Fields{"arg2": graphFilename}).Info("args to the main script")
+			cmd := exec.Command(config.PATH_TO_GRAPH_SCRIPT, graphScriptArgs...) // graphing scripts  moves the image to path specified
 			cmd.Stdout = os.Stdout
-			if err = cmd.Run(); err != nil {
+			if err := cmd.Run(); err != nil {
 				log.Info("Error in running graphing script")
 				log.Error(err)
 			}
 
-			// now make the throughput graph for each of the algorithms
+			// (b) Throughput/delay plots per algorithm
 			for alg, _ := range rep.Throughput {
-				log.Info("Alg is ", alg)
-				alg_broken := strings.Split(alg, " ")
-				alg = strings.Join(alg_broken, "_")
+				alg = shared.RemoveSpacesAlg(alg)
 				// log for graphing script
-				title := fmt.Sprintf("%s_Throughput", alg)
-				thr_log := fmt.Sprintf("%s_%s", alg, graph_location)
-				outfile := fmt.Sprintf("%s_throughput", alg)
-				graph_args := []string{thr_log, outfile, title, graph_directory}
-				log.Info(graph_args)
-
-				cmd = exec.Command(config.PATH_TO_GRAPH_THROUGHPUT_SCRIPT, graph_args...)
+				throughputGraphTitle, throughputLogfile, throughputTmp := shared.ThroughputGraphName(graphFilename, alg)
+				throughoutGraphArgs := []string{throughputLogfile, throughputTmp, throughputGraphTitle, folder}
+				log.WithFields(log.Fields{"arg1": throughputLogfile, "arg2": throughputTmp}).Info("Arguments to throughput graph function")
+				cmd = exec.Command(config.PATH_TO_GRAPH_THROUGHPUT_SCRIPT, throughoutGraphArgs...)
 				cmd.Stdout = os.Stdout
-				if err = cmd.Run(); err != nil {
+				if err := cmd.Run(); err != nil {
 					log.Info("Error in running graphing script for throughput graphs")
 					log.Error(err)
 				}
@@ -202,7 +167,6 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 }
 
 func getGraphInfo(ip_file string) {
-	log.Info("In get graph info server function")
 	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.DB_GRAPH_PORT)
 	if err != nil {
 		log.Fatal(err)
@@ -215,7 +179,6 @@ func getGraphInfo(ip_file string) {
 
 	for {
 		conn, err := server.AcceptTCP()
-		log.Info("Got a report to read from the client")
 		if err != nil {
 			log.Warning(err)
 		}

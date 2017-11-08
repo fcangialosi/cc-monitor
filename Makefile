@@ -6,7 +6,7 @@ cc-client: client/*.go config/*.go results/*.go shared/*.go
 cc-server: server/*.go config/*.go results/*.go
 	go build -o ./cc-server ./server/
 
-db-server: db/*.go config/*.go results/*.go
+db-server: db/*.go config/*.go results/*.go shared/*.go
 	go build -o ./db-server ./db/
 
 reader: db_client/*.go config/*.go results/*.go

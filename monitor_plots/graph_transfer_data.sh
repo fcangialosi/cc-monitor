@@ -6,6 +6,7 @@ graphtitle=$3
 pngfile="$outfile.png"
 RESULTS=$4 # final location to move the file
 cd "/home/ubuntu/cc-monitor"
+echo "outfile arg passed to reader: $outfile"
 ./reader $logfile $outfile
 cd "/home/ubuntu/cc-monitor/monitor_plots"
 mv "/home/ubuntu/cc-monitor/$outfile.csv" "$outfile.csv"
