@@ -9,4 +9,3 @@ aws-virginia 54.227.155.231
 aws-london 35.176.208.134
 aws-singapore 54.255.200.211
 aws-california 13.56.158.65
-nimbus2000 128.30.76.144
