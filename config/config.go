@@ -1,12 +1,12 @@
 package config
 
 const HOME = "/home/ubuntu/"
-const STORAGE = "/home/ubuntu/exp_results/"
+const STORAGE = "/home/ubuntu/mnt/"
 
 // conversion
 const BYTES_TO_MBITS = .000008
 
-const DB_IP = "34.226.119.144"
+const DB_IP = "54.162.11.158"
 
 // DB
 const DB_NAME = "cc_test_data"
