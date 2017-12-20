@@ -647,7 +647,7 @@ func stringInSlice(a string, list []string) bool {
 func main() {
 
 	CLIENT_VERSION = "v2.2.0"
-	fmt.Printf("cctest client %s\n\n", CLIENT_VERSION)
+	fmt.Printf("ccperf client %s\n\n", CLIENT_VERSION)
 
 	flag.Parse()
 
