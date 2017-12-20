@@ -25,6 +25,7 @@ import (
 var sendBuf []byte = make([]byte, config.TCP_TRANSFER_SIZE)
 var rng *rand.Rand
 var server_locked bool
+var server_updating bool
 var locked_by string
 var locked_until time.Time
 var lock_expires time.Time
@@ -34,6 +35,7 @@ var SERVER_VERSION string
 func init() {
 	rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 	server_locked = false
+	server_updating = false
 	locked_by = ""
 	locked_until = time.Time{}
 }
@@ -117,6 +119,9 @@ func pullServer() {
 		if err != nil {
 			log.Warn(err)
 		}
+		mu.Lock()
+		server_updating = true
+		mu.Unlock()
 		proc = exec.Command("/bin/bash", "-c", "sudo -u "+config.USER+" git -C "+config.HOME+"ccp pull")
 		out, err = proc.Output()
 		if err != nil {
@@ -125,6 +130,10 @@ func pullServer() {
 		} else {
 			conn.Write(out)
 		}
+		mu.Lock()
+		server_updating = false
+		mu.Unlock()
+
 		conn.Close()
 	}
 
@@ -285,10 +294,13 @@ func handleRequestTCP(conn *net.TCPConn) {
 	params := reqTime[6]
 	parsed_params := parseAlgParams(params)
 
-	if client_version != SERVER_VERSION || parsed_params == nil {
+	if client_version != SERVER_VERSION {
 		log.WithFields(log.Fields{"name": req_from, "ip": clientIP}).Warn("Received request from old client. Denying.")
 		conn.Write([]byte(fmt.Sprintf("%s %s", config.VERSION_MISMATCH, SERVER_VERSION)))
 		return
+	}
+	if parsed_params == nil {
+		conn.Write([]byte(fmt.Sprintf("%s Server was unable to parse params. Check your config for extraneous whitespaces.", config.OTHER_ERROR)))
 	}
 
 	on_time := time.Millisecond * config.MEAN_ON_TIME_MS
@@ -302,6 +314,13 @@ func handleRequestTCP(conn *net.TCPConn) {
 	}
 
 	mu.Lock()
+	if server_updating {
+		mu.Unlock()
+		log.Warn("Server currently updating CCP. Denying request.")
+		conn.Write([]byte(fmt.Sprintf("%s %s %s", config.SERVER_LOCKED, "git-pull", "10s")))
+		return
+	}
+
 	if server_locked && req_from != locked_by && time.Now().Before(lock_expires) && time.Now().Before(locked_until.Add(30*time.Second)) {
 		mu.Unlock()
 		log.WithFields(log.Fields{"expires": lock_expires, "locked_by": locked_by}).Warn("Server locked. Denying request...")
@@ -573,7 +592,7 @@ var my_public_ip string
 
 func main() {
 
-	SERVER_VERSION = "v2.2.0"
+	SERVER_VERSION = "v2.2.1"
 	fmt.Printf("ccperf server %s\n\n", SERVER_VERSION)
 
 	quit := make(chan struct{})
