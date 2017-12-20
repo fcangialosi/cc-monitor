@@ -1,7 +1,7 @@
-all: cc-client cc-server db-server reader update-site
+all: ccperf cc-server db-server reader update-site
 
-cc-client: client/*.go config/*.go results/*.go shared/*.go
-	go build -o ./cc-client ./client/
+ccperf: client/*.go config/*.go results/*.go shared/*.go
+	go build -o ./ccperf ./client/
 
 cc-server: server/*.go config/*.go results/*.go
 	go build -o ./cc-server ./server/
@@ -14,9 +14,9 @@ reader: db_client/*.go config/*.go results/*.go
 
 release: client/*.go config/*.go results/*.go
 	mkdir -p release/
-	GOARCH=amd64 GOOS=linux go build -o release/cc-client-linux ./client
-	#GOARCH=amd64 GOOS=darwin go build -o release/cc-client-darwin ./client
-	GOARCH=amd64 GOOS=windows go build -o release/cc-client-windows ./client
+	GOARCH=amd64 GOOS=linux go build -o release/ccperf-linux ./client
+	#GOARCH=amd64 GOOS=darwin go build -o release/ccperf-darwin ./client
+	GOARCH=amd64 GOOS=windows go build -o release/ccperf-windows ./client
 
 UNAME := $(shell uname)
 ifeq ($(UNAME), Darwin)
@@ -27,7 +27,7 @@ endif
 
 
 clean:
-	rm -f ./cc-client
+	rm -f ./ccperf
 	rm -f ./cc-server
 	rm -f ./db-server
 	rm -f ./reader
