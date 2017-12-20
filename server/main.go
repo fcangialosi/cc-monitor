@@ -17,6 +17,7 @@ import (
 	"cc-monitor/config"
 	"cc-monitor/results"
 	"cc-monitor/shared"
+
 	"github.com/rdegges/go-ipify"
 	log "github.com/sirupsen/logrus"
 )
@@ -97,6 +98,38 @@ func measureServerUDP() {
 	}
 }
 
+func pullServer() {
+	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.PULL_SERVER_PORT)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	server, err := net.ListenTCP("tcp", laddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var proc *exec.Cmd
+	var out []byte
+
+	for {
+		conn, err := server.AcceptTCP()
+		if err != nil {
+			log.Warn(err)
+		}
+		proc = exec.Command("/bin/bash", "-c", "sudo -u www-data git -C "+config.HOME+"ccp pull")
+		out, err = proc.Output()
+		if err != nil {
+			log.WithFields(log.Fields{"err": err, "cmd": "git pull"}).Error("Error running shell command")
+			conn.Write([]byte(err.Error()))
+		} else {
+			conn.Write(out)
+		}
+		conn.Close()
+	}
+
+}
+
 func measureServerTCP() {
 	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.MEASURE_SERVER_PORT)
 	if err != nil {
@@ -111,7 +144,7 @@ func measureServerTCP() {
 	for {
 		conn, err := server.AcceptTCP()
 		if err != nil {
-			log.Warning(err)
+			log.Warn(err)
 		}
 		go handleRequestTCP(conn)
 	}
@@ -131,7 +164,7 @@ func srttInfoServer() {
 	for {
 		conn, err := server.AcceptTCP()
 		if err != nil {
-			log.Warning(err)
+			log.Warn(err)
 		}
 		go handleSRTTRequest(conn)
 	}
@@ -540,7 +573,7 @@ var my_public_ip string
 
 func main() {
 
-	SERVER_VERSION = "v2.1.2"
+	SERVER_VERSION = "v2.2.0"
 	fmt.Printf("cctest server %s\n\n", SERVER_VERSION)
 
 	quit := make(chan struct{})
@@ -562,6 +595,7 @@ func main() {
 	go measureServerTCP() // Measure TCP throughput
 	go measureServerUDP() // open port to measure UDP throughput
 	go srttInfoServer()   // read the tcp probe output files, parse srtt array, and delete logfiles
+	go pullServer()
 
 	<-quit
 }

@@ -17,6 +17,7 @@ import (
 	"cc-monitor/config"
 	"cc-monitor/results"
 	"cc-monitor/shared"
+
 	color "github.com/fatih/color"
 	"github.com/fcangialosi/uiprogress"
 	log "github.com/sirupsen/logrus"
@@ -645,7 +646,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	CLIENT_VERSION = "v2.1.2"
+	CLIENT_VERSION = "v2.2.0"
 	fmt.Printf("cctest client %s\n\n", CLIENT_VERSION)
 
 	flag.Parse()
