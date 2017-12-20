@@ -1,5 +1,6 @@
 package config
 
+const USER = "ubuntu"
 const HOME = "/home/ubuntu/"
 const STORAGE = "/home/ubuntu/mnt/"
 

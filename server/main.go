@@ -117,7 +117,7 @@ func pullServer() {
 		if err != nil {
 			log.Warn(err)
 		}
-		proc = exec.Command("/bin/bash", "-c", "sudo -u www-data git -C "+config.HOME+"ccp pull")
+		proc = exec.Command("/bin/bash", "-c", "sudo -u "+config.USER+" git -C "+config.HOME+"ccp pull")
 		out, err = proc.Output()
 		if err != nil {
 			log.WithFields(log.Fields{"err": err, "cmd": "git pull"}).Error("Error running shell command")
