@@ -15,7 +15,7 @@ reader: db_client/*.go config/*.go results/*.go
 release: client/*.go config/*.go results/*.go
 	mkdir -p release/
 	GOARCH=amd64 GOOS=linux go build -o release/cc-client-linux ./client
-	GOARCH=amd64 GOOS=darwin go build -o release/cc-client-darwin ./client
+	#GOARCH=amd64 GOOS=darwin go build -o release/cc-client-darwin ./client
 	GOARCH=amd64 GOOS=windows go build -o release/cc-client-windows ./client
 
 UNAME := $(shell uname)
