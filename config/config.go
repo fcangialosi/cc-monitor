@@ -3,6 +3,7 @@ package config
 const USER = "ubuntu"
 const HOME = "/home/ubuntu/"
 const STORAGE = "/home/ubuntu/mnt/"
+const GOPATH = "/home/ubuntu/go-work"
 
 // conversion
 const BYTES_TO_MBITS = .000008

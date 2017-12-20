@@ -113,6 +113,7 @@ func pullServer() {
 
 	var proc *exec.Cmd
 	var out []byte
+	var out2 []byte
 
 	for {
 		conn, err := server.AcceptTCP()
@@ -128,8 +129,17 @@ func pullServer() {
 			log.WithFields(log.Fields{"err": err, "cmd": "git pull"}).Error("Error running shell command")
 			conn.Write([]byte(err.Error()))
 		} else {
-			conn.Write(out)
+			proc = exec.Command("/bin/bash", "-c", "GOPATH="+config.GOPATH+" sudo -u "+config.USER+" make")
+			out2, err = proc.Output()
+			if err != nil {
+				log.WithFields(log.Fields{"err": err, "cmd": "git pull"}).Error("Error running shell command")
+				conn.Write([]byte(err.Error()))
+			} else {
+				conn.Write(out)
+				conn.Write(out2)
+			}
 		}
+
 		mu.Lock()
 		server_updating = false
 		mu.Unlock()
