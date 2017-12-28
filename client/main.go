@@ -123,6 +123,8 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 		log.Error("Did not receive start from server")
 		return flow_throughputs, flow_times, delay, true, false
 	}
+	clientPort := resp[1]
+	//log.Info("client port: ", clientPort)
 
 	// log.Info("Connection established.")
 	fmt.Printf("\rConnection established.")
@@ -137,7 +139,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	}
 
 	started_flow := false
-	localPort := strings.Split(conn.LocalAddr().String(), ":")[1]
+	//localPort := strings.Split(conn.LocalAddr().String(), ":")[1]
 
 	// set first deadline for 30 seconds, then 30 seconds after
 	dline := time.Now().Add(config.CLIENT_TIMEOUT * time.Second)
@@ -184,7 +186,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	}
 	// else get the delay estimates from server
 	infoBuf := make([]byte, 0)
-	curtimePort := fmt.Sprintf("%s %s %s", curTime, localPort, alg)
+	curtimePort := fmt.Sprintf("%s %s %s", curTime, clientPort, alg)
 	conn2.Write([]byte(curtimePort))
 	// read until the buf is full
 	for {
@@ -650,7 +652,7 @@ func stringInSlice(a string, list []string) bool {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	CLIENT_VERSION = "v2.2.1"
+	CLIENT_VERSION = "v2.2.2"
 	fmt.Printf("ccperf client %s\n\n", CLIENT_VERSION)
 
 	flag.Parse()

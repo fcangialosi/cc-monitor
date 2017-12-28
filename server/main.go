@@ -272,8 +272,8 @@ func handleRequestTCP(conn *net.TCPConn) {
 	clientIPPort := conn.RemoteAddr().String()
 	clientIP := strings.Split(clientIPPort, ":")[0]
 	clientPort := strings.Split(clientIPPort, ":")[1]
-
-	startBuf := []byte("START_FLOW")
+	startStr := fmt.Sprintf("%s %s", "START_FLOW", clientPort)
+	startBuf := []byte(startStr)
 	reqBuf := make([]byte, config.MAX_REQ_SIZE)
 	n, err := conn.Read(reqBuf)
 	if err != nil {
@@ -602,7 +602,7 @@ var my_public_ip string
 
 func main() {
 
-	SERVER_VERSION = "v2.2.1"
+	SERVER_VERSION = "v2.2.2"
 	fmt.Printf("ccperf server %s\n\n", SERVER_VERSION)
 
 	quit := make(chan struct{})
