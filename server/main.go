@@ -602,7 +602,7 @@ var my_public_ip string
 
 func main() {
 
-	SERVER_VERSION = "v2.2.2"
+	SERVER_VERSION = "v2.3.0"
 	fmt.Printf("ccperf server %s\n\n", SERVER_VERSION)
 
 	quit := make(chan struct{})

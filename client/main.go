@@ -9,9 +9,13 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net"
+	"net/http"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"cc-monitor/config"
@@ -639,6 +643,7 @@ func PullConfigFromServer() (shared.ServerList, int, time.Duration, bool, bool, 
 var local_iplist = flag.String("config", "", "Filename to read ips and algorithms from rather than pulling from server")
 var should_resume = flag.Bool("resume", false, "Resume from most recent unfinished run")
 var name = flag.String("name", "", "Nickname, easier to recognize than IP address, default: $USER")
+var noupdate = flag.Bool("no-update", false, "Don't automatically update client if out of date")
 
 func stringInSlice(a string, list []string) bool {
 	for _, b := range list {
@@ -649,13 +654,96 @@ func stringInSlice(a string, list []string) bool {
 	return false
 }
 
+func ensureClientUpToDate(my_version string, platform string) {
+	if platform != "darwin" && platform != "linux" && platform != "windows" {
+		log.Warn("Unknown platform ", platform)
+		log.Warn("Skipping version check. Client may be out of date.")
+		return
+	}
+
+	resp, err := http.Get("http://ccperf.csail.mit.edu/version")
+	if err != nil {
+		log.Warn(err)
+		log.Warn("Failed to check version from ccperf.csail.mit.edu/version. Client may be out of date.")
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Warn(err)
+		log.Warn("Failed to check version from ccperf.csail.mit.edu/version. Client may be out of date.")
+		return
+	}
+	newest_version := strings.TrimSpace(string(body))
+
+	if my_version != newest_version {
+		fmt.Printf("Client (%s) is out of date.\nUpdating to newest version (%s)...\n", my_version, newest_version)
+
+		// Get absolute path of current running executable
+		dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+		if err != nil {
+			log.Warn(err)
+			return
+		}
+		exs := strings.Split(os.Args[0], "/")
+		ex := exs[len(exs)-1]
+		currEx := fmt.Sprintf("%s/%s", dir, ex)
+
+		// Download new executable to tmp file
+		newEx := fmt.Sprintf("/tmp/ccperf-%s", newest_version)
+		out, err := os.OpenFile(newEx, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+		if err != nil {
+			log.Warn(err)
+			log.Warn("Failed to create tmp file for new client.")
+			return
+		}
+		defer out.Close()
+
+		resp, err := http.Get("http://ccperf.csail.mit.edu/ccperf-" + platform)
+		if err != nil {
+			log.Warn(err)
+			log.Warn("Failed to get new client from server.")
+			return
+		}
+		defer resp.Body.Close()
+
+		_, err = io.Copy(out, resp.Body)
+		if err != nil {
+			log.Warn(err)
+			log.Warn("Failed to write new client executable.")
+			return
+		}
+
+		// Move new executable to current executable location
+		err = os.Rename(newEx, currEx)
+		if err != nil {
+			log.Warn(err)
+			log.Warn("Failed to overwrite current client.")
+			return
+		}
+
+		fmt.Println("Update complete.\n")
+
+		// Switch to new executable
+		if err := syscall.Exec(currEx, os.Args, os.Environ()); err != nil {
+			log.Fatal(err)
+		}
+
+	}
+}
+
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	CLIENT_VERSION = "v2.2.2"
-	fmt.Printf("ccperf client %s\n\n", CLIENT_VERSION)
+	CLIENT_VERSION = "v2.3.0"
+	fmt.Printf("ccperf client %s-%s\n\n", CLIENT_VERSION, runtime.GOOS)
 
 	flag.Parse()
+
+	if !*noupdate {
+		ensureClientUpToDate(CLIENT_VERSION, runtime.GOOS)
+	}
 
 	finishedIPs := make([]string, 0)
 	var progressFile *os.File
