@@ -36,7 +36,8 @@ const OPEN_UDP_PORT = "10105"
 const DB_GRAPH_PORT = "10105"
 const CLIENT_UDP_PORT = "9876"
 const SRTT_INFO_PORT = "10106"
-const PULL_SERVER_PORT = "10107"
+const CCP_UPDATE_PORT = "10107"
+const SERVER_UPDATE_PORT = "10108"
 
 // Ping server constants
 const PING_SIZE_BYTES = 1280

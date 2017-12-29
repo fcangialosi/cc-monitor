@@ -100,8 +100,8 @@ func measureServerUDP() {
 	}
 }
 
-func pullServer() {
-	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.PULL_SERVER_PORT)
+func updateServer(port string, script string) {
+	laddr, err := net.ResolveTCPAddr("tcp", ":"+port)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -113,7 +113,6 @@ func pullServer() {
 
 	var proc *exec.Cmd
 	var out []byte
-	var out2 []byte
 
 	for {
 		conn, err := server.AcceptTCP()
@@ -123,28 +122,26 @@ func pullServer() {
 		mu.Lock()
 		server_updating = true
 		mu.Unlock()
-		proc = exec.Command("/bin/bash", "-c", "sudo -u "+config.USER+" git -C "+config.HOME+"ccp pull")
+
+		proc = exec.Command("/bin/bash", script)
 		out, err = proc.Output()
 		if err != nil {
-			log.WithFields(log.Fields{"err": err, "cmd": "git pull"}).Error("Error running shell command")
-			conn.Write([]byte(err.Error()))
-		} else {
-			proc = exec.Command("/bin/bash", "-c", "GOPATH="+config.GOPATH+" sudo -u "+config.USER+" make")
-			out2, err = proc.Output()
-			if err != nil {
-				log.WithFields(log.Fields{"err": err, "cmd": "git pull"}).Error("Error running shell command")
-				conn.Write([]byte(err.Error()))
-			} else {
-				conn.Write(out)
-				conn.Write(out2)
-			}
+			log.Warn(err)
 		}
+		conn.Write(out)
 
 		mu.Lock()
 		server_updating = false
 		mu.Unlock()
 
 		conn.Close()
+
+		if port == config.SERVER_UPDATE_PORT {
+			if err := syscall.Exec(config.HOME+"cc-monitor/cc-server", os.Args, os.Environ()); err != nil {
+				log.Fatal(err)
+			}
+		}
+
 	}
 
 }
@@ -602,7 +599,7 @@ var my_public_ip string
 
 func main() {
 
-	SERVER_VERSION = "v2.3.0"
+	SERVER_VERSION = "v2.3.1"
 	fmt.Printf("ccperf server %s\n\n", SERVER_VERSION)
 
 	quit := make(chan struct{})
@@ -624,7 +621,8 @@ func main() {
 	go measureServerTCP() // Measure TCP throughput
 	go measureServerUDP() // open port to measure UDP throughput
 	go srttInfoServer()   // read the tcp probe output files, parse srtt array, and delete logfiles
-	go pullServer()
+	go updateServer(config.CCP_UPDATE_PORT, "./rebuild-ccp.sh")
+	go updateServer(config.SERVER_UPDATE_PORT, "./rebuild-server.sh")
 
 	<-quit
 }
