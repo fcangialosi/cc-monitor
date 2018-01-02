@@ -1,0 +1,1 @@
+sudo ./cc-server > server.log 2>&1 &
