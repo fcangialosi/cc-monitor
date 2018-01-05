@@ -78,7 +78,8 @@ func measureServerUDP() {
 			// for right now -> alg must be remy
 			// alg must have remy in it
 			if alg[:4] != config.REMY {
-				log.WithFields(log.Fields{"protocol": string(reqbuf[:n])}).Info("Read non-remy alg from client on open UDP port")
+				//log.WithFields(log.Fields{"protocol": string(reqbuf[:n])}).Info("Read non-remy alg from client on open UDP port")
+				return
 			}
 
 			// pick a port for genericCC to run
@@ -599,7 +600,7 @@ var my_public_ip string
 
 func main() {
 
-	SERVER_VERSION = "v2.3.1"
+	SERVER_VERSION = "v2.3.2"
 	fmt.Printf("ccperf server %s\n\n", SERVER_VERSION)
 
 	quit := make(chan struct{})
