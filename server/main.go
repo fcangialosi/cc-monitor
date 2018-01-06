@@ -354,6 +354,8 @@ func handleRequestTCP(conn *net.TCPConn) {
 	var ccpl_cmd *exec.Cmd
 	var logname string
 	if alg[:3] == "ccp" {
+		// kill any ccpl processes early
+		shellCommandNoErr("pkill ccpl", true)
 		ccname = "ccp"
 		logname = fmt.Sprintf(config.HOME+"cc-monitor/ccp_logs/%s_%s_ccpl.log", alg, shared.RemoveExpTime(strings.Replace(params, " ", "_", -1)))
 		args := []string{
@@ -413,7 +415,7 @@ sendloop:
 	}
 
 	if alg[:3] == "ccp" {
-		shellCommand("pkill ccpl", true)
+		shellCommand("pkill ccpl", true) // make sure there are no rogue ccpl processes
 		remotepath := config.DB_SERVER_CCP_TMP + shared.MachineHostname(my_public_ip) + "-" + shared.MachineHostname(strings.Split(conn.RemoteAddr().String(), ":")[0])
 		scpCommand := fmt.Sprintf("scp -i %s %s %s:%s", config.PATH_TO_PRIV_KEY, logname, config.DB_SERVER, remotepath+"/")
 		shellCommand(scpCommand, true)
@@ -542,6 +544,21 @@ func runGCC(srcport string, ip string, alg string) (float64, results.TimeRTTMap)
 	}
 	log.Info("Finished handling request UDP, lossRATE: ", lossRate)
 	return lossRate, results.TimeRTTMap{}
+}
+
+func shellCommandNoErr(cmd string, wait bool) *exec.Cmd {
+	proc := exec.Command("/bin/bash", "-c", cmd)
+	if wait {
+		if err := proc.Run(); err != nil {
+			log.WithFields(log.Fields{"err": err, "cmd": cmd}).Info("Error running shell command, but it's ok")
+		}
+	} else {
+		if err := proc.Start(); err != nil {
+			log.WithFields(log.Fields{"err": err, "cmd": cmd}).Info("Error starting shell command, but it's ok")
+		}
+	}
+	return proc
+
 }
 
 func shellCommand(cmd string, wait bool) *exec.Cmd {
