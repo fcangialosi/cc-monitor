@@ -5,8 +5,8 @@ hari-home 108.7.195.28
 ng-home 173.48.177.222
 deepti-home 24.61.40.182
 jon-holland 77.81.247.72
-aws-virginia 52.200.132.236
-aws-london 35.177.1.136
-aws-singapore 13.250.23.51
-aws-california 52.53.126.204
+aws-nimbus-virginia 52.90.202.69
+aws-nimbus-london 35.177.194.72
+aws-nimbus-singapore 54.179.166.34
+aws-nimbus-california 52.53.126.204
 nimbus2000 128.30.76.144
