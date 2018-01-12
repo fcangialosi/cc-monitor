@@ -94,6 +94,9 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 		alg = alg + " exp_time=" + exp_time.String()
 	}
 
+	// write in the cycle number so the server knows which cycle this is for saving the TCPprobe and CCP logs file
+	alg = fmt.Sprintf("%s trial=%d", alg, cycle+1)
+
 	curr_exp, err := strconv.Atoi(strings.Split(progress_string, "/")[0])
 	total_exp, err := strconv.Atoi(strings.Split(progress_string, "/")[1])
 	if curr_exp == total_exp {
