@@ -219,12 +219,13 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	tput_mbps := color.BlueString(fmt.Sprintf("%0.1f", singleThroughputMeasurement(flow_throughputs[bytes_received], bytes_received)))
 	delay_ms := color.RedString(fmt.Sprintf("%d", int(fullDelay/count)))
 	proto := color.GreenString(shared.FriendlyAlgString(alg))
+	trial := color.MagentaString(fmt.Sprintf("%d", cycle+1))
 	algParams := shared.ParseAlgParams(alg)
 	expTime := ""
 	if val, ok := algParams["exp_time"]; ok {
 		expTime = val[:(len(val) - 1)]
 	}
-	output := fmt.Sprintf("\rproto:%s, tput_mbps: %s, delay_ms: %s, exptime_s: %s\n", proto, tput_mbps, delay_ms, expTime)
+	output := fmt.Sprintf("\rproto:%s, trial:%s, tput_mbps: %s, delay_ms: %s, exptime_s: %s\n", proto, trial, tput_mbps, delay_ms, expTime)
 	fmt.Fprintf(os.Stderr, output)
 	//fmt.Println("proto:%s,tput_mbps:%s%.1f,delay_ms:%s%d,elapsed:%.1f", alg, BLUE, tput_mbps, RED, delay_ms, elapsed)
 	/*log.WithFields(log.Fields{
@@ -739,7 +740,7 @@ func ensureClientUpToDate(my_version string, platform string) {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	CLIENT_VERSION = "v2.3.3"
+	CLIENT_VERSION = "v2.3.4"
 	fmt.Printf("ccperf client %s-%s\n\n", CLIENT_VERSION, runtime.GOOS)
 
 	flag.Parse()
