@@ -620,7 +620,7 @@ var port = flag.Int("port", 10100, "Each time ccperf needs a port, it chooses th
 
 func main() {
 
-	SERVER_VERSION = "v2.3.5"
+	SERVER_VERSION = "v2.3.6"
 	fmt.Printf("ccperf server %s\n\n", SERVER_VERSION)
 
 	flag.Parse()
