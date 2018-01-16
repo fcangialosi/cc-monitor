@@ -30,6 +30,7 @@ import (
 var RETRY_LOCKED bool
 var NAME string
 var CLIENT_VERSION string
+var BASE_PORT int
 
 /*Simple function to print errors or ignore them*/
 func CheckError(err error) bool {
@@ -77,7 +78,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	bytes_received := uint64(0)
 
 	// start connection
-	gen_conn, err := net.DialTimeout("tcp", server_ip+":"+config.MEASURE_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
+	gen_conn, err := net.DialTimeout("tcp", server_ip+":"+config.MEASURE_SERVER_PORT(BASE_PORT), config.CONNECT_TIMEOUT*time.Second)
 	if CheckErrMsg(err, "Failed to connect to server. Perhaps it is offline?") {
 		time.Sleep(2 * time.Second)
 		return flow_throughputs, flow_times, delay, true, false
@@ -186,7 +187,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	}
 	progress.Stop()
 	fmt.Printf("Retrieving rtts from server...")
-	conn2, err := net.DialTimeout("tcp", server_ip+":"+config.SRTT_INFO_PORT, config.CONNECT_TIMEOUT*time.Second)
+	conn2, err := net.DialTimeout("tcp", server_ip+":"+config.SRTT_INFO_PORT(BASE_PORT), config.CONNECT_TIMEOUT*time.Second)
 	if CheckErrMsg(err, "\rFailed to retrieve RTTs from server") {
 		time.Sleep(2 * time.Second)
 		return flow_throughputs, flow_times, delay, true, false
@@ -264,7 +265,7 @@ func measureUDP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	recvBuf := make([]byte, config.TRANSFER_BUF_SIZE)
 
 	// create a TCP connection to get the genericCC port
-	conn, err := net.DialTimeout("tcp", server_ip+":"+config.OPEN_UDP_PORT, config.CONNECT_TIMEOUT*time.Second)
+	conn, err := net.DialTimeout("tcp", server_ip+":"+config.OPEN_UDP_PORT(BASE_PORT), config.CONNECT_TIMEOUT*time.Second)
 	if CheckErrMsg(err, "Open TCP connection to get genericCC port number") {
 		time.Sleep(2 * time.Second)
 		return flow_throughputs, flow_times, timeRTTMap, true, false
@@ -437,7 +438,7 @@ func runExperiment(f func(server_ip string, alg string, num_cycles int, cycle in
 
 func sendReport(report []byte) {
 	// log.Info("Sending report to server")
-	conn, err := net.DialTimeout("tcp", config.DB_IP+":"+config.DB_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
+	conn, err := net.DialTimeout("tcp", config.DB_IP+":"+config.DB_SERVER_PORT(), config.CONNECT_TIMEOUT*time.Second)
 	if CheckError(err) {
 		return
 	}
@@ -557,9 +558,9 @@ outer_loop:
 			progress_string = fmt.Sprintf("%d/%d", place+1, total_experiments)
 			for !timed_out && locked { // && retries < config.LOCKED_RETRIES {
 				if proto == "tcp" {
-					timed_out, locked = runExperiment(measureTCP, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT, 1, cycle, this_exp_time, lock_servers, progress_string)
+					timed_out, locked = runExperiment(measureTCP, IP, alg, &report, "tcp", config.PING_TCP_SERVER_PORT(BASE_PORT), 1, cycle, this_exp_time, lock_servers, progress_string)
 				} else if proto == "udp" {
-					timed_out, locked = runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT, 1, cycle, this_exp_time, lock_servers, progress_string)
+					timed_out, locked = runExperiment(measureUDP, IP, alg, &report, "udp", config.PING_UDP_SERVER_PORT(BASE_PORT), 1, cycle, this_exp_time, lock_servers, progress_string)
 				} else {
 					log.Warn("Unknown protocol! Skipping...")
 					break
@@ -608,7 +609,7 @@ func CheckErrMsg(err error, message string) bool { // check error
 }
 
 func getURLFromServer(gg results.GraphInfo) string {
-	conn, err := net.DialTimeout("tcp", config.DB_IP+":"+config.DB_GRAPH_PORT, config.CONNECT_TIMEOUT*time.Second)
+	conn, err := net.DialTimeout("tcp", config.DB_IP+":"+config.DB_GRAPH_PORT(), config.CONNECT_TIMEOUT*time.Second)
 	if CheckError(err) {
 		return "unknown"
 	}
@@ -621,7 +622,7 @@ func getURLFromServer(gg results.GraphInfo) string {
 }
 
 func PullConfigFromServer() (shared.ServerList, int, time.Duration, bool, bool, int) {
-	conn, err := net.DialTimeout("tcp", config.DB_IP+":"+config.IP_SERVER_PORT, config.CONNECT_TIMEOUT*time.Second)
+	conn, err := net.DialTimeout("tcp", config.DB_IP+":"+config.IP_SERVER_PORT(), config.CONNECT_TIMEOUT*time.Second)
 	if err != nil {
 		log.Fatal("Error contacting config server: ", err)
 	}
@@ -648,6 +649,7 @@ var local_iplist = flag.String("config", "", "Filename to read ips and algorithm
 var should_resume = flag.Bool("resume", false, "Resume from most recent unfinished run")
 var name = flag.String("name", "", "Nickname, easier to recognize than IP address, default: $USER")
 var noupdate = flag.Bool("no-update", false, "Don't automatically update client if out of date")
+var port = flag.Int("port", 10100, "Base port used to connect to all servers")
 
 func stringInSlice(a string, list []string) bool {
 	for _, b := range list {
@@ -740,7 +742,7 @@ func ensureClientUpToDate(my_version string, platform string) {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	CLIENT_VERSION = "v2.3.4"
+	CLIENT_VERSION = "v2.3.5"
 	fmt.Printf("ccperf client %s-%s\n\n", CLIENT_VERSION, runtime.GOOS)
 
 	flag.Parse()

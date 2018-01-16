@@ -1,5 +1,7 @@
 package config
 
+import "strconv"
+
 const USER = "ubuntu"
 const HOME = "/home/ubuntu/"
 const STORAGE = "/home/ubuntu/mnt/"
@@ -26,18 +28,21 @@ const SEQNUM_START = 0
 const SEQNUM_END = 4
 
 // Ports
-const PING_UDP_SERVER_PORT = "10100"
-const PING_TCP_SERVER_PORT = "10101"
-const MEASURE_SERVER_PORT = "10102"
-const DB_SERVER_PORT = "10103"
-const IP_SERVER_PORT = "10104"
+const DEFAULT_PORT = 10100
+
+func PING_UDP_SERVER_PORT(base_port int) string { return strconv.Itoa(base_port + 0) }
+func PING_TCP_SERVER_PORT(base_port int) string { return strconv.Itoa(base_port + 1) }
+func MEASURE_SERVER_PORT(base_port int) string  { return strconv.Itoa(base_port + 2) }
+func DB_SERVER_PORT() string                    { return strconv.Itoa(DEFAULT_PORT + 3) }
+func IP_SERVER_PORT() string                    { return strconv.Itoa(DEFAULT_PORT + 4) }
+func DB_GRAPH_PORT() string                     { return strconv.Itoa(DEFAULT_PORT + 5) }
+func SRTT_INFO_PORT(base_port int) string       { return strconv.Itoa(base_port + 6) }
+func CCP_UPDATE_PORT(base_port int) string      { return strconv.Itoa(base_port + 7) }
+func SERVER_UPDATE_PORT(base_port int) string   { return strconv.Itoa(base_port + 8) }
+func CLIENT_UDP_PORT(base_port int) string      { return strconv.Itoa(base_port + 9) }
+func OPEN_UDP_PORT(base_port int) string        { return strconv.Itoa(base_port + 10) }
+
 const MAX_PORT = 65535
-const OPEN_UDP_PORT = "10105"
-const DB_GRAPH_PORT = "10105"
-const CLIENT_UDP_PORT = "9876"
-const SRTT_INFO_PORT = "10106"
-const CCP_UPDATE_PORT = "10107"
-const SERVER_UPDATE_PORT = "10108"
 
 // Ping server constants
 const PING_SIZE_BYTES = 1280

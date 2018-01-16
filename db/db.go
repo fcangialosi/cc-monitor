@@ -13,6 +13,7 @@ import (
 	"cc-monitor/config"
 	"cc-monitor/results"
 	"cc-monitor/shared"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -54,7 +55,7 @@ func getIPLocation(ip_file string, input_ip string) string {
 
 func introServer(ip_file string) {
 
-	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.IP_SERVER_PORT)
+	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.IP_SERVER_PORT())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -80,7 +81,7 @@ func dbServer(ch chan results.CCResults) {
 	/*
 		Listens for TCP connections where client will send the report of the experiment over.
 	*/
-	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.DB_SERVER_PORT)
+	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.DB_SERVER_PORT())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -168,7 +169,7 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 }
 
 func getGraphInfo(ip_file string) {
-	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.DB_GRAPH_PORT)
+	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.DB_GRAPH_PORT())
 	if err != nil {
 		log.Fatal(err)
 	}

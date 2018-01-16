@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"math/rand"
 	"net"
@@ -31,6 +32,7 @@ var locked_until time.Time
 var lock_expires time.Time
 var mu sync.Mutex
 var SERVER_VERSION string
+var BASE_PORT int
 
 func init() {
 	rng = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -48,7 +50,7 @@ func checkErrMsg(err error, message string) {
 
 /*Handles the "open genericCC protocol" -> over TCP*/
 func measureServerUDP() {
-	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.OPEN_UDP_PORT)
+	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.OPEN_UDP_PORT(BASE_PORT))
 	checkErrMsg(err, "open TCP port for starting genericCC")
 
 	server, err := net.ListenTCP("tcp", laddr)
@@ -137,7 +139,7 @@ func updateServer(port string, script string) {
 
 		conn.Close()
 
-		if port == config.SERVER_UPDATE_PORT {
+		if port == config.SERVER_UPDATE_PORT(BASE_PORT) {
 			if err := syscall.Exec(config.HOME+"cc-monitor/cc-server", os.Args, os.Environ()); err != nil {
 				log.Fatal(err)
 			}
@@ -148,7 +150,7 @@ func updateServer(port string, script string) {
 }
 
 func measureServerTCP() {
-	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.MEASURE_SERVER_PORT)
+	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.MEASURE_SERVER_PORT(BASE_PORT))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -168,7 +170,7 @@ func measureServerTCP() {
 }
 
 func srttInfoServer() {
-	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.SRTT_INFO_PORT)
+	laddr, err := net.ResolveTCPAddr("tcp", ":"+config.SRTT_INFO_PORT(BASE_PORT))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -614,18 +616,23 @@ func runTCPProbe(killCh chan bool, port string, outfile string) {
 }
 
 var my_public_ip string
+var port = flag.Int("port", 10100, "Each time ccperf needs a port, it chooses the next one incrementally starting from this value.\n        If running multiple servers on the same machine, ports should be at least 100 apart to prevent overlap (e.g. 10100 and 10200).")
 
 func main() {
 
-	SERVER_VERSION = "v2.3.4"
+	SERVER_VERSION = "v2.3.5"
 	fmt.Printf("ccperf server %s\n\n", SERVER_VERSION)
+
+	flag.Parse()
+
+	BASE_PORT = *port
 
 	quit := make(chan struct{})
 
 	log.Info("Preparing TCP Probe")
 	// shellCommand("sudo rmmod tcp_probe", true)
 	//	shellCommand("sudo modprobe tcp_probe full=1", true)
-	shellCommand("sudo modprobe tcp_probe port="+config.MEASURE_SERVER_PORT+" full=1", true)
+	shellCommand("sudo modprobe tcp_probe port="+config.MEASURE_SERVER_PORT(BASE_PORT)+" full=1", true)
 	shellCommand("sudo chmod 444 /proc/net/tcpprobe", true)
 
 	public_ip, err := ipify.GetIp()
@@ -639,8 +646,8 @@ func main() {
 	go measureServerTCP() // Measure TCP throughput
 	go measureServerUDP() // open port to measure UDP throughput
 	go srttInfoServer()   // read the tcp probe output files, parse srtt array, and delete logfiles
-	go updateServer(config.CCP_UPDATE_PORT, "./rebuild-ccp.sh")
-	go updateServer(config.SERVER_UPDATE_PORT, "./rebuild-server.sh")
+	go updateServer(config.CCP_UPDATE_PORT(BASE_PORT), "./rebuild-ccp.sh")
+	go updateServer(config.SERVER_UPDATE_PORT(BASE_PORT), "./rebuild-server.sh")
 
 	<-quit
 }
