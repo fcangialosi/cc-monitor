@@ -81,12 +81,13 @@ func ParseAlg(line string) (string, string) {
 
 type ServerList []map[string][]string
 type YAMLConfig struct {
-	Num_cycles   int
-	Exp_time     string
-	Lock_servers bool
-	Servers      ServerList
-	Retry_locked bool
-	Pick_servers int
+	Num_cycles           int
+	Exp_time             string
+	Wait_btwn_trial_time string
+	Lock_servers         bool
+	Servers              ServerList
+	Retry_locked         bool
+	Pick_servers         int
 }
 
 func ReadYAMLConfig(config_file string) *YAMLConfig {
@@ -104,13 +105,17 @@ func ReadYAMLConfig(config_file string) *YAMLConfig {
 	return &config
 }
 
-func ParseYAMLConfig(config_file string) (ServerList, int, time.Duration, bool, bool, int) {
+func ParseYAMLConfig(config_file string) (ServerList, int, time.Duration, time.Duration, bool, bool, int) {
 	config := ReadYAMLConfig(config_file)
 	exp_time, err := time.ParseDuration(config.Exp_time)
 	if err != nil {
 		log.Fatal("Config contains invalid exp_time, expected format: [0-9]?(s|m|h)")
 	}
-	return config.Servers, config.Num_cycles, exp_time, config.Lock_servers, config.Retry_locked, config.Pick_servers
+	wait_time, err := time.ParseDuration(config.Wait_btwn_trial_time)
+	if err != nil {
+		log.Fatal("Config contains invalid wait_time, expected format: [0-9]?(s|m|h)")
+	}
+	return config.Servers, config.Num_cycles, exp_time, wait_time, config.Lock_servers, config.Retry_locked, config.Pick_servers
 }
 
 func EncodeConfig(config *YAMLConfig) []byte {
@@ -118,6 +123,7 @@ func EncodeConfig(config *YAMLConfig) []byte {
 	e := gob.NewEncoder(w)
 	e.Encode(config.Num_cycles)
 	e.Encode(config.Exp_time)
+	e.Encode(config.Wait_btwn_trial_time)
 	e.Encode(config.Lock_servers)
 	e.Encode(config.Servers)
 	e.Encode(config.Retry_locked)
@@ -134,6 +140,7 @@ func DecodeConfig(data []byte) YAMLConfig {
 	d := gob.NewDecoder(r)
 	d.Decode(&config.Num_cycles)
 	d.Decode(&config.Exp_time)
+	d.Decode(&config.Wait_btwn_trial_time)
 	d.Decode(&config.Lock_servers)
 	d.Decode(&config.Servers)
 	d.Decode(&config.Retry_locked)
@@ -147,8 +154,16 @@ func UTCTimeString() string {
 
 func RemoveExpTime(alg string) string {
 	algSp := strings.Split(alg, "_")
+	// Remove 'exp_time'
 	for i, _ := range algSp {
 		if algSp[i] == "exp" {
+			algSp = append(algSp[:i], algSp[i+2:]...)
+			break
+		}
+	}
+	// Remove 'wait_time'
+	for i, _ := range algSp {
+		if algSp[i] == "wait" {
 			algSp = append(algSp[:i], algSp[i+2:]...)
 			break
 		}

@@ -224,9 +224,10 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	algParams := shared.ParseAlgParams(alg)
 	expTime := ""
 	if val, ok := algParams["exp_time"]; ok {
-		expTime = val[:(len(val) - 1)]
+		expTime = val
 	}
-	output := fmt.Sprintf("\rproto:%s, trial:%s, tput_mbps: %s, delay_ms: %s, exptime_s: %s\n", proto, trial, tput_mbps, delay_ms, expTime)
+	algParamsNoTime := shared.RemoveExpTime(alg)
+	output := fmt.Sprintf("\rproto:%s, trial:%s, tput_mbps: %s, delay_ms: %s, exptime_s: %s, alg_params: %s\n", proto, trial, tput_mbps, delay_ms, expTime, algParamsNoTime)
 	fmt.Fprintf(os.Stderr, output)
 	//fmt.Println("proto:%s,tput_mbps:%s%.1f,delay_ms:%s%d,elapsed:%.1f", alg, BLUE, tput_mbps, RED, delay_ms, elapsed)
 	/*log.WithFields(log.Fields{
@@ -469,7 +470,7 @@ func getSendTimeLocalFile(localResultsStorage string) string { // if there is a 
 	return tempReport.SendTime
 }
 
-func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int, total_experiments int, record bool, exp_time time.Duration, lock_servers bool) (string, int, int) {
+func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int, total_experiments int, record bool, exp_time time.Duration, wait_time time.Duration, lock_servers bool) (string, int, int) {
 	localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, IP)
 	report := results.CCResults{
 		ServerIP:   IP,
@@ -586,6 +587,14 @@ outer_loop:
 			CheckErrMsg(err, "Writing file into bytes")
 			place++
 		}
+		// after each round of algorithms, sleep for wait time
+		if wait_time > 0 && cycle < num_cycles-1 {
+			fmt.Printf("Waiting between trials...")
+			time.Sleep(wait_time)
+			clearStr := strings.Repeat(" ", len("Waiting between trials..."))
+			fmt.Printf("\r%s", clearStr)
+		}
+		fmt.Printf("\n") // new line
 		cycle++
 	}
 
@@ -621,7 +630,7 @@ func getURLFromServer(gg results.GraphInfo) string {
 	return string(recvBuf[:n])
 }
 
-func PullConfigFromServer() (shared.ServerList, int, time.Duration, bool, bool, int) {
+func PullConfigFromServer() (shared.ServerList, int, time.Duration, time.Duration, bool, bool, int) {
 	conn, err := net.DialTimeout("tcp", config.DB_IP+":"+config.IP_SERVER_PORT(), config.CONNECT_TIMEOUT*time.Second)
 	if err != nil {
 		log.Fatal("Error contacting config server: ", err)
@@ -639,8 +648,12 @@ func PullConfigFromServer() (shared.ServerList, int, time.Duration, bool, bool, 
 	if err != nil {
 		log.Fatal("Config contains invalid exp_time, expected format: [0-9]?(s|m|h)")
 	}
+	wait_time, err := time.ParseDuration(config.Wait_btwn_trial_time)
+	if err != nil {
+		log.Fatal("Config contains invalid wait_time, expected format: [0-9]?(s|m|h)")
+	}
 
-	return config.Servers, config.Num_cycles, exp_time, config.Lock_servers, config.Retry_locked, config.Pick_servers
+	return config.Servers, config.Num_cycles, exp_time, wait_time, config.Lock_servers, config.Retry_locked, config.Pick_servers
 }
 
 //var use_mm = flag.Bool("mm", false, "If true, connect to a local server from inside a mahimahi shell")
@@ -742,7 +755,7 @@ func ensureClientUpToDate(my_version string, platform string) {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	CLIENT_VERSION = "v2.3.6"
+	CLIENT_VERSION = "v2.3.7"
 	fmt.Printf("ccperf client %s-%s\n\n", CLIENT_VERSION, runtime.GOOS)
 
 	flag.Parse()
@@ -786,6 +799,7 @@ func main() {
 	var servers shared.ServerList
 	var num_cycles int
 	var exp_time time.Duration
+	var wait_time time.Duration
 	var lock_servers bool
 	var retry_locked bool
 	var num_to_pick int
@@ -793,9 +807,9 @@ func main() {
 		if _, err := os.Stat(*local_iplist); os.IsNotExist(err) {
 			log.Fatal("Unable to find config file ", *local_iplist)
 		}
-		servers, num_cycles, exp_time, lock_servers, retry_locked, num_to_pick = shared.ParseYAMLConfig(*local_iplist)
+		servers, num_cycles, exp_time, wait_time, lock_servers, retry_locked, num_to_pick = shared.ParseYAMLConfig(*local_iplist)
 	} else {
-		servers, num_cycles, exp_time, lock_servers, retry_locked, num_to_pick = PullConfigFromServer()
+		servers, num_cycles, exp_time, wait_time, lock_servers, retry_locked, num_to_pick = PullConfigFromServer()
 	}
 	if num_to_pick <= 0 {
 		num_to_pick = 1
@@ -850,7 +864,7 @@ server_loop:
 				continue
 			}
 			fmt.Printf("\tAttempting to connect...")
-			sendTime, new_place, num_finished = runExperimentOnMachine(ip, algs, num_cycles, place, len(algs), *should_resume, exp_time, lock_servers)
+			sendTime, new_place, num_finished = runExperimentOnMachine(ip, algs, num_cycles, place, len(algs), *should_resume, exp_time, wait_time, lock_servers)
 			place = new_place
 			sendMap[ip] = sendTime
 			count++
