@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"cc-monitor/config"
+
 	log "github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -113,7 +114,7 @@ func ParseYAMLConfig(config_file string) (ServerList, int, time.Duration, time.D
 	}
 	wait_time, err := time.ParseDuration(config.Wait_btwn_trial_time)
 	if err != nil {
-		log.Fatal("Config contains invalid wait_time, expected format: [0-9]?(s|m|h)")
+		log.Fatal("Config contains invalid wait_btwn_trial_time, expected format: [0-9]?(s|m|h)")
 	}
 	return config.Servers, config.Num_cycles, exp_time, wait_time, config.Lock_servers, config.Retry_locked, config.Pick_servers
 }

@@ -650,7 +650,7 @@ func PullConfigFromServer() (shared.ServerList, int, time.Duration, time.Duratio
 	}
 	wait_time, err := time.ParseDuration(config.Wait_btwn_trial_time)
 	if err != nil {
-		log.Fatal("Config contains invalid wait_time, expected format: [0-9]?(s|m|h)")
+		log.Fatal("Config contains invalid wait_btwn_trial_time, expected format: [0-9]?(s|m|h)")
 	}
 
 	return config.Servers, config.Num_cycles, exp_time, wait_time, config.Lock_servers, config.Retry_locked, config.Pick_servers

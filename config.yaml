@@ -2,6 +2,7 @@
 num_cycles: 1
 exp_time: 1m # accepts int number of (s)econds or (m)inutes
 lock_servers: true
+wait_btwn_trial_time: 10s
 
 # Default algorithms to use for each server if not specified 
 default: &default
