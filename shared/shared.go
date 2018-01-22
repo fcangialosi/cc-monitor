@@ -202,6 +202,19 @@ func CreateLogFolder(clientIP string, serverIP string, clientTime string) string
 	return path
 }
 
+func SpecificAlgLogFolder(folder string, alg string) string {
+	shortAlg := RemoveExpTime(RemoveSpacesAlg(alg))
+	fullPath := fmt.Sprintf("%s/%s", folder, shortAlg)
+	return fullPath
+}
+
+/*For each report - also create a subfolder per algorithm. This is where the graph per trial will go and eventually the logfiles for that alg*/
+func CreateLogAlgFolder(folder string, alg string) {
+	fullPath := SpecificAlgLogFolder(folder, alg)
+	err := os.Mkdir(fullPath, 0777)
+	checkErr(err, fmt.Sprintf("Creating log alg directory for path %s\n", fullPath))
+}
+
 /*
 Opens a filename and writes bytes to said file.
 */

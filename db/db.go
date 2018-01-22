@@ -127,6 +127,10 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 		go func(rep results.CCResults) {
 			// 1: create path where the graphs and bytes will go
 			folder := shared.CreateLogFolder(rep.ClientIP, rep.ServerIP, rep.SendTime)
+			// create individual folders for each algorithm to house the trials and logs
+			for alg, _ := range rep.Throughput {
+				shared.CreateLogAlgFolder(folder, alg)
+			}
 
 			// 2: write all the bytes to a file called {folder}/bytes.log
 			bytesLogFile := shared.WriteBytes(results.EncodeCCResults(&rep), fmt.Sprintf("%s/%s", folder, "bytes.log"))
@@ -149,12 +153,14 @@ func dbWorker(ch chan results.CCResults, ip_file string) {
 				log.Error(err)
 			}
 
-			// (b) Throughput/delay plots per algorithm
+			// (b) Throughput/delay plots per algorithm - also does individual throughput delay plots
 			for alg, _ := range rep.Throughput {
 				alg = shared.RemoveSpacesAlg(alg)
+				numFlows := fmt.Sprintf("%d", (len(rep.Throughput[alg]) - 1))
+				algFolder := shared.SpecificAlgLogFolder(folder, alg)
 				// log for graphing script
 				throughputGraphTitle, throughputLogfile, throughputTmp := shared.ThroughputGraphName(graphFilename, alg)
-				throughoutGraphArgs := []string{throughputLogfile, throughputTmp, throughputGraphTitle, folder}
+				throughoutGraphArgs := []string{throughputLogfile, throughputTmp, throughputGraphTitle, folder, algFolder, numFlows}
 				log.WithFields(log.Fields{"arg1": throughputLogfile, "arg2": throughputTmp}).Info("Arguments to throughput graph function")
 				cmd = exec.Command(config.PATH_TO_GRAPH_THROUGHPUT_SCRIPT, throughoutGraphArgs...)
 				cmd.Stdout = os.Stdout
