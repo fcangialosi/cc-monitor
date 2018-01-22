@@ -36,6 +36,18 @@ func readfile(filepath string, outfile string) {
 	checkErrMsg(err, "reading bytes into buf")
 	results := results.DecodeCCResults(b[:n])
 
+	winstein_fd, err := os.Create(outfile + "_ellipse.csv")
+	checkErrMsg(err, "opening ellipse csv file for writing")
+	w_ellipse := bufio.NewWriter(winstein_fd)
+	_, err = fmt.Fprintf(w_ellipse, "count,delay,throughput,algorithm\n") // all the points at the end of the trial
+	defer winstein_fd.Close()
+
+	agg_fd, err := os.Create(outfile + "_agg.csv")
+	checkErrMsg(err, "opening agg csv file for writing")
+	w_agg := bufio.NewWriter(agg_fd)
+	_, err = fmt.Fprintf(w_agg, "count,delay,throughput,algorithm\n")
+	defer agg_fd.Close()
+
 	outfile_fd, err := os.Create(outfile + ".csv")
 	checkErrMsg(err, "opening csv file for writing")
 
@@ -44,11 +56,13 @@ func readfile(filepath string, outfile string) {
 	// write header line into the file
 	_, err = fmt.Fprintf(w, "delay,throughput,algorithm,filesize\n")
 	for _, filesize := range filesizes {
-		parseLogs(&results, filesize*1000, outfile, w, false) // array is in KB, not bytes
+		parseLogs(&results, filesize*1000, outfile, w, w_agg, w_ellipse, false) // array is in KB, not bytes
 	}
 	log.Info("finished for normal, now for last")
 	// now do it for the last filesize achieved
-	parseLogs(&results, 1000, outfile, w, true)
+	parseLogs(&results, 1000, outfile, w, w_agg, w_ellipse, true)
+	w_ellipse.Flush()
+	w_agg.Flush()
 	w.Flush()
 
 	createThroughputDelayLogs(&results, outfile)
@@ -190,12 +204,14 @@ func createThroughputDelayLogs(cc *results.CCResults, outfile string) {
 	}
 }
 
-func parseLogs(cc *results.CCResults, file_size uint64, outfile string, w *bufio.Writer, last bool) {
+func parseLogs(cc *results.CCResults, file_size uint64, outfile string, w *bufio.Writer, w_agg *bufio.Writer, w_ellipse *bufio.Writer, last bool) {
 
 	/*for alg, flow_times := range cc.FlowTimes {
 	  log.WithFields(log.Fields{"algorithm": alg, "dict": flow_times}).Info("flow times")
 	}*/
-
+	// w is for the regular graph of the avg of all the schemes
+	// then w_agg is for the winstein plot with all the points aggregated and w_ellipse
+	agg_count := 0 // count,delay,throughput,alg
 	for alg, thr := range cc.Throughput {
 		log.WithFields(log.Fields{"alg": alg}).Info("result")
 		/*if alg[:4] == "remy" {
@@ -240,6 +256,10 @@ func parseLogs(cc *results.CCResults, file_size uint64, outfile string, w *bufio
 						flow_num_valid++
 						flow_tot_del += avg_delay
 						flow_tot_thr += thr_measurement
+						// add in this delay and throughput measurement to the aggregate list of points
+						fmt.Fprintf(w_agg, "%d,%g,%g,%s\n", agg_count, avg_delay, thr_measurement, alg)
+						fmt.Fprintf(w_ellipse, "%d,%g,%g,%s\n", agg_count, avg_delay, thr_measurement, alg)
+						agg_count++
 					}
 					break
 				}
