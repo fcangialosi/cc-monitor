@@ -755,7 +755,7 @@ func ensureClientUpToDate(my_version string, platform string) {
 /*Client will do Remy experiment first, then Cubic experiment, then send data back to the server*/
 func main() {
 
-	CLIENT_VERSION = "v2.3.7"
+	CLIENT_VERSION = "v2.3.8"
 	fmt.Printf("ccperf client %s-%s\n\n", CLIENT_VERSION, runtime.GOOS)
 
 	flag.Parse()
