@@ -10,7 +10,7 @@ const GOPATH = "/home/ubuntu/go-work"
 // conversion
 const BYTES_TO_MBITS = .000008
 
-const DB_IP = "54.162.11.158"
+const DB_IP = "34.205.159.255"
 
 // DB
 const DB_NAME = "cc_test_data"
