@@ -33,7 +33,7 @@ sudo modprobe tcp_vegas
 # Load TCP Cubic
 sudo modprobe tcp_cubic
 # Load CCP
-cd /home/ubuntu/ccp-kernel/
+cd ../ccp-kernel/
 sudo insmod ccp.ko
 cd -
 
