@@ -92,6 +92,9 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	// write timestamp for server to be able to identify this client connection later
 	curTime := shared.UTCTimeString()
     origAlgName := alg
+    algSp := strings.Split(origAlgName, " ")
+    shortName := algSp[0] + shared.GetValues(origAlgName)
+
 	if _, ok := shared.ParseAlgParams(alg)["exp_time"]; !ok {
 		alg = alg + " exp_time=" + exp_time.String()
 	}
@@ -192,7 +195,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 
         if chunk_elapsed >= 5000 {
             mbps := float32(curr_chunk_bytes) * 8.0 / (float32(chunk_elapsed) / 1000.0) / 1000000.0
-            fmt.Printf("%s %s %d %f %d %d %f\n", server_ip, origAlgName, cycle+1, last_received_time, curr_chunk_bytes, chunk_elapsed, mbps)
+            fmt.Printf("%s %s %d %f %d %d %f\n", server_ip, shortName, cycle+1, last_received_time, curr_chunk_bytes, chunk_elapsed, mbps)
             curr_chunk_bytes = 0
             last = time.Now()
         }
@@ -201,7 +204,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 		measureThroughput(start, bytes_received, flow_throughputs)
 	}
 	//progress.Stop()
-	fmt.Printf("Retrieving rtts from server...")
+	fmt.Printf("Retrieving rtts from server...\n")
 	conn2, err := net.DialTimeout("tcp", server_ip+":"+config.SRTT_INFO_PORT(BASE_PORT), config.CONNECT_TIMEOUT*time.Second)
 	if CheckErrMsg(err, "\rFailed to retrieve RTTs from server") {
 		time.Sleep(2 * time.Second)
@@ -246,8 +249,8 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	//algParamsNoTime := shared.RemoveExpTime(alg)
 	//output := fmt.Sprintf("\rproto:%s, trial:%s, tput_mbps: %s, delay_ms: %s, exptime_s: %s, alg_params: %s\n", proto, trial, tput_mbps, delay_ms, expTime, algParamsNoTime)
 
-    output := fmt.Sprintf("%s %s %d %s %s", server_ip, origAlgName, cycle+1, tput_mbps, delay_ms)
-	fmt.Fprintf(os.Stdout, output)
+    fmt.Printf("\n%s %s %d %s %s\n\n", server_ip, shortName, cycle+1, tput_mbps, delay_ms)
+	//fmt.Fprintf(os.Stdout, output)
 	//fmt.Println("proto:%s,tput_mbps:%s%.1f,delay_ms:%s%d,elapsed:%.1f", alg, BLUE, tput_mbps, RED, delay_ms, elapsed)
 	/*log.WithFields(log.Fields{
 		"trial":                 cycle + 1,
