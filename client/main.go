@@ -95,6 +95,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 		alg = alg + " exp_time=" + exp_time.String()
 	}
 
+
 	// write in the cycle number so the server knows which cycle this is for saving the TCPprobe and CCP logs file
 	alg = fmt.Sprintf("%s trial=%d", alg, cycle+1)
 
@@ -498,7 +499,7 @@ func runExperimentOnMachine(IP string, algs []string, num_cycles int, place int,
 		// decode the bytes
 		tempReport = results.DecodeCCResults(savedBytes)
 		// delete the file
-		err = os.Remove(localResultsStorage)
+		//err = os.Remove(localResultsStorage)
 		if err != nil {
 			log.Warn("Trying to remove local results file")
 		}
@@ -601,7 +602,7 @@ outer_loop:
 	sendTime := shared.UTCTimeString()
 	report.SendTime = sendTime
 	if num_finished > 0 {
-		sendReport(results.EncodeCCResults(&report))
+        //sendReport(results.EncodeCCResults(&report))
 	}
 	// write the file - has a send time
 	b := results.EncodeCCResults(&report)
@@ -804,11 +805,13 @@ func main() {
 	var retry_locked bool
 	var num_to_pick int
 	if *local_iplist != "" {
+        log.Info("Using local config")
 		if _, err := os.Stat(*local_iplist); os.IsNotExist(err) {
 			log.Fatal("Unable to find config file ", *local_iplist)
 		}
 		servers, num_cycles, exp_time, wait_time, lock_servers, retry_locked, num_to_pick = shared.ParseYAMLConfig(*local_iplist)
 	} else {
+        log.Info("Using remote config")
 		servers, num_cycles, exp_time, wait_time, lock_servers, retry_locked, num_to_pick = PullConfigFromServer()
 	}
 	if num_to_pick <= 0 {
@@ -877,11 +880,11 @@ server_loop:
 			progressWriter.Flush()
 
 			if num_finished >= num_to_pick {
-				if send_time, ok := sendMap[ip]; ok && send_time != "NONE" {
-					info := results.GraphInfo{ServerIP: ip, SendTime: send_time}
-					url := getURLFromServer(info)
-					fmt.Printf("Results for server %s : %s\n", ip, url)
-				}
+				//if send_time, ok := sendMap[ip]; ok && send_time != "NONE" {
+				//	info := results.GraphInfo{ServerIP: ip, SendTime: send_time}
+				//	url := getURLFromServer(info)
+				//	fmt.Printf("Results for server %s : %s\n", ip, url)
+				//}
 				num_servers_contacted += 1
 				break server_loop
 			}
@@ -894,15 +897,15 @@ server_loop:
 	}
 
 	// delete all the files
-	for _, d := range servers {
-		for ip, _ := range d {
-			localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, ip)
-			err := os.Remove(localResultsStorage)
-			if err != nil {
-				log.Info("Error removing local results storage: ", localResultsStorage)
-			}
-		}
-	}
+	//for _, d := range servers {
+	//	for ip, _ := range d {
+	//		localResultsStorage := fmt.Sprintf("%s-%s.log", config.LOCAL_RESULTS_FILE, ip)
+	//		err := os.Remove(localResultsStorage)
+	//		if err != nil {
+	//			log.Info("Error removing local results storage: ", localResultsStorage)
+	//		}
+	//	}
+	//}
 
 	// delete progress files
 	err := os.Remove(config.LOCAL_PROGRESS_FILE)
