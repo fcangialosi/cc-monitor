@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 	"sort"
-
 	"strings"
 
-	"cc-monitor/config"
-	"cc-monitor/results"
+	"github.com/fcangialosi/cc-monitor/config"
+	"github.com/fcangialosi/cc-monitor/results"
+
 	log "github.com/sirupsen/logrus"
 )
 

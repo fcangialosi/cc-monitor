@@ -1,4 +1,4 @@
-all: ccperf cc-server db-server reader update-site
+all: ccperf cc-server
 
 ccperf: client/*.go config/*.go results/*.go shared/*.go
 	go build -o ./ccperf ./client/

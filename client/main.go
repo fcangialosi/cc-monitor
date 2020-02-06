@@ -18,9 +18,9 @@ import (
 	"syscall"
 	"time"
 
-	"cc-monitor/config"
-	"cc-monitor/results"
-	"cc-monitor/shared"
+	"github.com/fcangialosi/cc-monitor/config"
+	"github.com/fcangialosi/cc-monitor/results"
+	"github.com/fcangialosi/cc-monitor/shared"
 
 	color "github.com/fatih/color"
 	"github.com/fcangialosi/uiprogress"
@@ -95,7 +95,6 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 		alg = alg + " exp_time=" + exp_time.String()
 	}
 
-
 	// write in the cycle number so the server knows which cycle this is for saving the TCPprobe and CCP logs file
 	alg = fmt.Sprintf("%s trial=%d", alg, cycle+1)
 
@@ -158,9 +157,9 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	progress.SetRefreshInterval(time.Millisecond * 500)
 	var bar *uiprogress.Bar
 
-    last := time.Now()
-    curr_chunk_bytes := uint64(0)
-    fmt.Printf("\nelapsed_ms chunk_bytes chunk_ms chunk_mbps\n")
+	last := time.Now()
+	curr_chunk_bytes := uint64(0)
+	fmt.Printf("\nelapsed_ms chunk_bytes chunk_ms chunk_mbps\n")
 	for {
 		n, err := conn.Read(recvBuf)
 		if err == io.EOF || n <= 0 {
@@ -184,20 +183,19 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 			//progress.Start()
 		}
 
-
 		bytes_received += uint64(n)
-        curr_chunk_bytes += uint64(n)
-        chunk_elapsed := time.Since(last) / 1e6
+		curr_chunk_bytes += uint64(n)
+		chunk_elapsed := time.Since(last) / 1e6
 		last_received_time = elapsed(original_start)
 
-        if chunk_elapsed >= 5000 {
-            mbps := float32(curr_chunk_bytes) * 8.0 / (float32(chunk_elapsed) / 1000.0) / 1000000.0
-            fmt.Printf("%f %d %d %f\n", last_received_time, curr_chunk_bytes, chunk_elapsed, mbps)
-            curr_chunk_bytes = 0
-            last = time.Now()
-        }
+		if chunk_elapsed >= 5000 {
+			mbps := float32(curr_chunk_bytes) * 8.0 / (float32(chunk_elapsed) / 1000.0) / 1000000.0
+			fmt.Printf("%f %d %d %f\n", last_received_time, curr_chunk_bytes, chunk_elapsed, mbps)
+			curr_chunk_bytes = 0
+			last = time.Now()
+		}
 
-	//	bar.Set(int(last_received_time), int(bytes_received))
+		//	bar.Set(int(last_received_time), int(bytes_received))
 		measureThroughput(start, bytes_received, flow_throughputs)
 	}
 	//progress.Stop()
@@ -616,7 +614,7 @@ outer_loop:
 	sendTime := shared.UTCTimeString()
 	report.SendTime = sendTime
 	if num_finished > 0 {
-        //sendReport(results.EncodeCCResults(&report))
+		//sendReport(results.EncodeCCResults(&report))
 	}
 	// write the file - has a send time
 	b := results.EncodeCCResults(&report)
@@ -819,13 +817,13 @@ func main() {
 	var retry_locked bool
 	var num_to_pick int
 	if *local_iplist != "" {
-        log.Info("Using local config")
+		log.Info("Using local config")
 		if _, err := os.Stat(*local_iplist); os.IsNotExist(err) {
 			log.Fatal("Unable to find config file ", *local_iplist)
 		}
 		servers, num_cycles, exp_time, wait_time, lock_servers, retry_locked, num_to_pick = shared.ParseYAMLConfig(*local_iplist)
 	} else {
-        log.Info("Using remote config")
+		log.Info("Using remote config")
 		servers, num_cycles, exp_time, wait_time, lock_servers, retry_locked, num_to_pick = PullConfigFromServer()
 	}
 	if num_to_pick <= 0 {
