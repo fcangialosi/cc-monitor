@@ -136,7 +136,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	//log.Info("client port: ", clientPort)
 
 	// log.Info("Connection established.")
-	fmt.Printf("\rConnection established.")
+	fmt.Printf("Connection established.\n")
 
 	// now start the timer
 	start := time.Now() // start of flow is when client sends first message to send back data
@@ -158,6 +158,9 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	progress.SetRefreshInterval(time.Millisecond * 500)
 	var bar *uiprogress.Bar
 
+    last := time.Now()
+    curr_chunk_bytes := uint64(0)
+    fmt.Printf("\nelapsed_ms chunk_bytes chunk_ms chunk_mbps\n")
 	for {
 		n, err := conn.Read(recvBuf)
 		if err == io.EOF || n <= 0 {
@@ -178,15 +181,26 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 			bar.PrependSecRemaining()
 			bar.PrependString(progress_string + " |")
 			bar.AppendOtherBytes()
-			progress.Start()
+			//progress.Start()
 		}
 
+
 		bytes_received += uint64(n)
+        curr_chunk_bytes += uint64(n)
+        chunk_elapsed := time.Since(last) / 1e6
 		last_received_time = elapsed(original_start)
-		bar.Set(int(last_received_time), int(bytes_received))
+
+        if chunk_elapsed >= 5000 {
+            mbps := float32(curr_chunk_bytes) * 8.0 / (float32(chunk_elapsed) / 1000.0) / 1000000.0
+            fmt.Printf("%f %d %d %f\n", last_received_time, curr_chunk_bytes, chunk_elapsed, mbps)
+            curr_chunk_bytes = 0
+            last = time.Now()
+        }
+
+	//	bar.Set(int(last_received_time), int(bytes_received))
 		measureThroughput(start, bytes_received, flow_throughputs)
 	}
-	progress.Stop()
+	//progress.Stop()
 	fmt.Printf("Retrieving rtts from server...")
 	conn2, err := net.DialTimeout("tcp", server_ip+":"+config.SRTT_INFO_PORT(BASE_PORT), config.CONNECT_TIMEOUT*time.Second)
 	if CheckErrMsg(err, "\rFailed to retrieve RTTs from server") {
