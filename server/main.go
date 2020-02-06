@@ -359,22 +359,43 @@ func handleRequestTCP(conn *net.TCPConn) {
 	var logname string
 	if alg[:3] == "ccp" {
 		// kill any ccpl processes early
-		shellCommandNoErr("pkill ccpl", true)
+		proc_parsed := strings.Split(alg[4:], "/")
+		proc_name := proc_parsed[len(proc_parsed)-1]
+		fmt.Printf("trying to kill %s", proc_name)
+		shellCommandNoErr("pkill "+proc_name, true)
 		ccname = "ccp"
-		logname = fmt.Sprintf(config.HOME+"cc-monitor/ccp_logs/%s_%s_ccpl.log", alg, shared.RemoveExpTime(strings.Replace(params, " ", "_", -1)))
-		args := []string{
-			config.PATH_TO_CCP,
-			"--datapath=kernel",
-			"--congAlg=" + alg[4:],
-			"--logfile=" + logname,
+		shortParams := shared.GetValues(params)
+		shortName, _ := shared.ParseAlg(alg)
+		logname = fmt.Sprintf(config.HOME+"cc-monitor/ccp_logs/%s_%s_ccpl.log", shortName, shortParams)
+		logfile, err := os.Create(logname)
+		if err != nil {
+			log.Fatal(err)
 		}
-		args_string := strings.Join(args, " ") + " " + params
+		defer logfile.Close()
+		//args := []string{
+		//	config.PATH_TO_CCP,
+		//	"--datapath=kernel",
+		//	"--congAlg=" + alg[4:],
+		//	"--logfile=" + logname,
+		//}
+		//args_string := strings.Join(args, " ") + " " + params
+		cleanParams := shared.RemoveExtract(params)
+		args_string := config.PATH_TO_TOOLS + alg[4:] + " " + cleanParams // + " > " + logname + " >&2"
+
 		// cmd := shellCommand(args_string, false)
 		ccpl_cmd = exec.Command("sudo", strings.Split(args_string, " ")...)
 		ccpl_cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-		if err := ccpl_cmd.Start(); err != nil {
+		ccpl_cmd.Stdout = logfile
+		ccpl_cmd.Stderr = logfile
+		fmt.Printf("%+v\n", ccpl_cmd)
+
+		err = ccpl_cmd.Start()
+		if err != nil {
 			log.WithFields(log.Fields{"err": err, "cmd": ccpl_cmd}).Error("Error starting ccpl")
 		}
+		//if err := ccpl_cmd.Start(); err != nil {
+		//	log.WithFields(log.Fields{"err": err, "cmd": ccpl_cmd}).Error("Error starting ccpl")
+		//}
 
 		// Give ccpl some time to startup
 		time.Sleep(500 * time.Millisecond)
@@ -419,16 +440,19 @@ sendloop:
 	}
 
 	if alg[:3] == "ccp" {
-		shellCommand("pkill ccpl", true) // make sure there are no rogue ccpl processes
-		remotepath := config.DB_SERVER_CCP_TMP + shared.MachineHostname(my_public_ip) + "-" + shared.MachineHostname(strings.Split(conn.RemoteAddr().String(), ":")[0])
-		scpCommand := fmt.Sprintf("scp -i %s %s %s:%s", config.PATH_TO_PRIV_KEY, logname, config.DB_SERVER, remotepath+"/")
-		shellCommand(scpCommand, true)
+		proc_parsed := strings.Split(alg[4:], "/")
+		proc_name := proc_parsed[len(proc_parsed)-1]
+		fmt.Printf("trying to kill %s", proc_name)
+		shellCommandNoErr("pkill "+proc_name, true)
+		//remotepath := config.DB_SERVER_CCP_TMP + shared.MachineHostname(my_public_ip) + "-" + shared.MachineHostname(strings.Split(conn.RemoteAddr().String(), ":")[0])
+		//scpCommand := fmt.Sprintf("scp -i %s %s %s:%s", config.PATH_TO_PRIV_KEY, logname, config.DB_SERVER, remotepath+"/")
+		//shellCommand(scpCommand, true)
 
-		// remove the log
-		rm_err := os.Remove(logname)
-		if rm_err != nil {
-			log.Info("error on removing file ", logname)
-		}
+		//// remove the log
+		//rm_err := os.Remove(logname)
+		//if rm_err != nil {
+		//	log.Info("error on removing file ", logname)
+		//}
 
 	}
 

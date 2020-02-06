@@ -77,7 +77,7 @@ func FriendlyAlgString(line string) string {
 
 func ParseAlg(line string) (string, string) {
 	sp := strings.Split(line, "/")
-	return sp[0], sp[1]
+	return sp[0], strings.Join(sp[1:], "/")
 }
 
 type ServerList []map[string][]string
@@ -170,6 +170,32 @@ func RemoveExpTime(alg string) string {
 		}
 	}
 	return strings.Join(algSp, "_")
+}
+
+func RemoveExtract(alg string) string {
+	algSp := strings.Split(alg, " ")
+	for i, _ := range algSp {
+		fmt.Println(algSp[i])
+		if len(algSp[i]) >= 3 && (algSp[i][:3] == "exp" || algSp[i][:3] == "tri") {
+			algSp = algSp[:i]
+			break
+		}
+	}
+	return strings.Join(algSp, " ")
+}
+
+func GetValues(params string) string {
+	var out []string
+
+	sp := strings.Split(params, " ")
+	for i, _ := range sp {
+		spe := strings.Split(sp[i], "=")
+		if len(spe) == 2 {
+			out = append(out, spe[1])
+		}
+	}
+
+	return strings.Join(out, "_")
 }
 
 func RemoveSpacesAlg(alg string) string {

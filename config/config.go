@@ -81,6 +81,7 @@ const END = "END"
 const TRAIN_LENGTH = 8
 
 const PATH_TO_CCP = HOME + "ccp/ccpl"
+const PATH_TO_TOOLS = HOME + "tools/"
 const PATH_TO_PRIV_KEY = HOME + ".ssh/rach.pem"
 
 const DB_SERVER = "ubuntu@" + DB_IP

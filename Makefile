@@ -3,7 +3,7 @@ all: ccperf cc-server db-server reader update-site
 ccperf: client/*.go config/*.go results/*.go shared/*.go
 	go build -o ./ccperf ./client/
 
-cc-server: server/*.go config/*.go results/*.go
+cc-server: server/*.go config/*.go results/*.go shared/*.go
 	go build -o ./cc-server ./server/
 
 db-server: db/*.go config/*.go results/*.go shared/*.go
