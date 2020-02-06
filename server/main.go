@@ -257,6 +257,8 @@ func handleSRTTRequest(conn *net.TCPConn) {
 	// need to send back this rttDict
 	lossRTTInfo := results.LossRTTInfo{LossRate: 0, Delay: rttDict}
 	conn.Write(results.EncodeLossRTTInfo(&lossRTTInfo))
+
+	return
 	// then delete the file
 	// transfer this to the DB
 	alg = shared.RemoveExpTime(alg)
