@@ -22,7 +22,7 @@ import (
 	"github.com/fcangialosi/cc-monitor/results"
 	"github.com/fcangialosi/cc-monitor/shared"
 
-	color "github.com/fatih/color"
+	//color "github.com/fatih/color"
 	"github.com/fcangialosi/uiprogress"
 	log "github.com/sirupsen/logrus"
 )
@@ -91,6 +91,7 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 
 	// write timestamp for server to be able to identify this client connection later
 	curTime := shared.UTCTimeString()
+    origAlgName := alg
 	if _, ok := shared.ParseAlgParams(alg)["exp_time"]; !ok {
 		alg = alg + " exp_time=" + exp_time.String()
 	}
@@ -157,9 +158,10 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	progress.SetRefreshInterval(time.Millisecond * 500)
 	var bar *uiprogress.Bar
 
-	last := time.Now()
-	curr_chunk_bytes := uint64(0)
-	fmt.Printf("\nelapsed_ms chunk_bytes chunk_ms chunk_mbps\n")
+    last := time.Now()
+    curr_chunk_bytes := uint64(0)
+
+    fmt.Printf("\nIP alg trial elapsed_ms chunk_bytes chunk_ms chunk_mbps\n")
 	for {
 		n, err := conn.Read(recvBuf)
 		if err == io.EOF || n <= 0 {
@@ -188,12 +190,12 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 		chunk_elapsed := time.Since(last) / 1e6
 		last_received_time = elapsed(original_start)
 
-		if chunk_elapsed >= 5000 {
-			mbps := float32(curr_chunk_bytes) * 8.0 / (float32(chunk_elapsed) / 1000.0) / 1000000.0
-			fmt.Printf("%f %d %d %f\n", last_received_time, curr_chunk_bytes, chunk_elapsed, mbps)
-			curr_chunk_bytes = 0
-			last = time.Now()
-		}
+        if chunk_elapsed >= 5000 {
+            mbps := float32(curr_chunk_bytes) * 8.0 / (float32(chunk_elapsed) / 1000.0) / 1000000.0
+            fmt.Printf("%s %s %d %f %d %d %f\n", server_ip, origAlgName, cycle+1, last_received_time, curr_chunk_bytes, chunk_elapsed, mbps)
+            curr_chunk_bytes = 0
+            last = time.Now()
+        }
 
 		//	bar.Set(int(last_received_time), int(bytes_received))
 		measureThroughput(start, bytes_received, flow_throughputs)
@@ -230,18 +232,22 @@ func measureTCP(server_ip string, alg string, num_cycles int, cycle int, exp_tim
 	//BLUE := "\u001B[34m"
 	//RED := "\u001B[31m"
 	// ************ RESULTS ****
-	tput_mbps := color.BlueString(fmt.Sprintf("%0.1f", singleThroughputMeasurement(flow_throughputs[bytes_received], bytes_received)))
-	delay_ms := color.RedString(fmt.Sprintf("%d", int(fullDelay/count)))
-	proto := color.GreenString(shared.FriendlyAlgString(alg))
-	trial := color.MagentaString(fmt.Sprintf("%d", cycle+1))
-	algParams := shared.ParseAlgParams(alg)
-	expTime := ""
-	if val, ok := algParams["exp_time"]; ok {
-		expTime = val
-	}
-	algParamsNoTime := shared.RemoveExpTime(alg)
-	output := fmt.Sprintf("\rproto:%s, trial:%s, tput_mbps: %s, delay_ms: %s, exptime_s: %s, alg_params: %s\n", proto, trial, tput_mbps, delay_ms, expTime, algParamsNoTime)
-	fmt.Fprintf(os.Stderr, output)
+	//tput_mbps := color.BlueString(fmt.Sprintf("%0.1f", singleThroughputMeasurement(flow_throughputs[bytes_received], bytes_received)))
+	tput_mbps := (fmt.Sprintf("%0.1f", singleThroughputMeasurement(flow_throughputs[bytes_received], bytes_received)))
+	//delay_ms := color.RedString(fmt.Sprintf("%d", int(fullDelay/count)))
+	delay_ms := (fmt.Sprintf("%d", int(fullDelay/count)))
+	//proto := color.GreenString(shared.FriendlyAlgString(alg))
+	//trial := color.MagentaString(fmt.Sprintf("%d", cycle+1))
+	//algParams := shared.ParseAlgParams(alg)
+	//expTime := ""
+	//if val, ok := algParams["exp_time"]; ok {
+	//	expTime = val
+	//}
+	//algParamsNoTime := shared.RemoveExpTime(alg)
+	//output := fmt.Sprintf("\rproto:%s, trial:%s, tput_mbps: %s, delay_ms: %s, exptime_s: %s, alg_params: %s\n", proto, trial, tput_mbps, delay_ms, expTime, algParamsNoTime)
+
+    output := fmt.Sprintf("%s %s %d %s %s", server_ip, origAlgName, cycle+1, tput_mbps, delay_ms)
+	fmt.Fprintf(os.Stdout, output)
 	//fmt.Println("proto:%s,tput_mbps:%s%.1f,delay_ms:%s%d,elapsed:%.1f", alg, BLUE, tput_mbps, RED, delay_ms, elapsed)
 	/*log.WithFields(log.Fields{
 		"trial":                 cycle + 1,
